@@ -1,0 +1,134 @@
+
+> fleetcommand@0.1.0 dev
+> next dev -p 3000
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3000
+
+ ✓ Starting...
+ ✓ Ready in 2.5s
+ ○ Compiling /sonex ...
+ ✓ Compiled /sonex in 10.9s (1585 modules)
+ GET /sonex 200 in 14041ms
+ GET /sonex 200 in 3769ms
+ ✓ Compiled in 3.2s (786 modules)
+ ✓ Compiled in 564ms (772 modules)
+ ○ Compiling /sonex/login ...
+ ✓ Compiled /sonex/login in 3.7s (831 modules)
+ ✓ Compiled in 794ms (779 modules)
+ GET /favicon.ico 200 in 4882ms
+ GET /favicon.ico 200 in 5094ms
+ ○ Compiling /sonex/loads ...
+ ✓ Compiled /sonex/messages in 8.9s (1687 modules)
+ ○ Compiling /sonex/financials ...
+ ✓ Compiled /sonex/carriers in 16.8s (2171 modules)
+ GET /sonex/messages 200 in 6880ms
+ ○ Compiling /favicon.ico ...
+ ✓ Compiled /favicon.ico in 560ms (1172 modules)
+ GET /favicon.ico 200 in 1145ms
+ ○ Compiling /sonex/carriers/[id] ...
+ ✓ Compiled /sonex/carriers/[id] in 4.2s (2217 modules)
+ ○ Compiling /sonex/loads/[id] ...
+ ✓ Compiled /sonex/loads/[id] in 3.2s (1919 modules)
+ ○ Compiling /sonex/load-log ...
+ ✓ Compiled /sonex/load-log in 7.4s (1426 modules)
+ ○ Compiling /sonex/documents ...
+ ✓ Compiled /sonex/documents in 928ms (380 modules)
+ ✓ Compiled /sonex/messages in 506ms (388 modules)
+ ○ Compiling /sonex/financials ...
+ ✓ Compiled /sonex/financials in 8.4s (1137 modules)
+ ○ Compiling /sonex/settings ...
+ ✓ Compiled /sonex/settings in 1277ms (1147 modules)
+ ○ Compiling /sonex/carriers ...
+ ✓ Compiled /sonex/carriers in 978ms (1147 modules)
+ ○ Compiling /sonex ...
+ ✓ Compiled /sonex in 4.2s (1116 modules)
+ GET /sonex 200 in 1069ms
+ ○ Compiling /favicon.ico ...
+ ✓ Compiled /favicon.ico in 4.3s (1140 modules)
+ GET /favicon.ico 200 in 5801ms
+ GET /sonex/login 200 in 474ms
+ GET /favicon.ico 200 in 91ms
+ ○ Compiling /sonex/load-log ...
+ ✓ Compiled /sonex/load-log in 3.7s (1117 modules)
+ ○ Compiling /sonex/loads/[id] ...
+ ✓ Compiled /sonex/loads/[id] in 4.5s (1124 modules)
+ ✓ Compiled in 2.7s (2185 modules)
+ ✓ Compiled in 1829ms (2185 modules)
+ ✓ Compiled in 1452ms (2185 modules)
+ ✓ Compiled in 1169ms (1068 modules)
+ ✓ Compiled in 1017ms (2171 modules)
+ ✓ Compiled in 923ms (2171 modules)
+ ✓ Compiled in 1067ms (2185 modules)
+ ✓ Compiled in 888ms (2171 modules)
+ ✓ Compiled in 1261ms (2171 modules)
+ GET /sonex/login 200 in 613ms
+ GET /sonex/loads/load-006 200 in 324ms
+ ○ Compiling /favicon.ico ...
+ ✓ Compiled /favicon.ico in 1561ms (1149 modules)
+ GET /favicon.ico 200 in 2514ms
+ GET /favicon.ico 200 in 2633ms
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 1416ms (2205 modules)
+ GET /sonex/login 404 in 124ms
+ GET /sonex/login 404 in 128ms
+ ○ Compiling /sonex/login ...
+ ✓ Compiled /sonex/login in 1648ms (2207 modules)
+ ✓ Compiled in 1031ms (2186 modules)
+ ✓ Compiled in 681ms (2186 modules)
+ ✓ Compiled in 406ms (1068 modules)
+ ✓ Compiled in 1013ms (2186 modules)
+ ✓ Compiled in 844ms (2173 modules)
+ ✓ Compiled in 425ms (1055 modules)
+ ✓ Compiled in 253ms (1055 modules)
+ ✓ Compiled in 353ms (1055 modules)
+ ✓ Compiled in 252ms (1055 modules)
+ ✓ Compiled in 2.6s (2153 modules)
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 2.9s (2142 modules)
+ GET /sonex 404 in 271ms
+ ○ Compiling /sonex ...
+ ✓ Compiled /sonex in 2.3s (2168 modules)
+ ✓ Compiled in 1484ms (1060 modules)
+ ✓ Compiled in 1247ms (2182 modules)
+ GET /sonex/login 200 in 989ms
+ GET /sonex 200 in 991ms
+ ✓ Compiled /favicon.ico in 341ms (1154 modules)
+ GET /favicon.ico 200 in 516ms
+ GET /favicon.ico 200 in 590ms
+ ✓ Compiled in 1043ms (2177 modules)
+ ✓ Compiled in 1056ms (2163 modules)
+ ✓ Compiled in 913ms (2163 modules)
+ GET /sonex/login 200 in 135ms
+ GET /sonex 200 in 174ms
+ ○ Compiling /favicon.ico ...
+ ✓ Compiled /favicon.ico in 725ms (1154 modules)
+ GET /favicon.ico 200 in 609ms
+ GET /favicon.ico 200 in 986ms
+ ✓ Compiled in 337ms (1055 modules)
+ ✓ Compiled in 357ms (1055 modules)
+ ✓ Compiled in 664ms (2163 modules)
+ ✓ Compiled in 1117ms (2163 modules)
+ GET /sonex 200 in 730ms
+ GET /sonex/login 200 in 774ms
+ ✓ Compiled /favicon.ico in 158ms (1154 modules)
+ GET /favicon.ico 200 in 384ms
+ GET /favicon.ico 200 in 389ms
+ ✓ Compiled in 626ms (2195 modules)
+ GET /sonex/login 200 in 541ms
+ GET /sonex 200 in 517ms
+ GET /favicon.ico 200 in 14ms
+ GET /favicon.ico 200 in 10ms
+ ✓ Compiled in 1410ms (2177 modules)
+ ✓ Compiled in 399ms (1055 modules)
+ ✓ Compiled in 284ms (1055 modules)
+ ✓ Compiled in 794ms (2177 modules)
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 689ms (2166 modules)
+ GET /_next/static/css/app/layout.css?v=1782688468257 404 in 890ms
+ GET /_next/static/css/app/layout.css?v=1782688468287 404 in 880ms
+ ✓ Compiled in 2.9s (1055 modules)
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 1987ms (2166 modules)
+ ○ Compiling /_error ...
+ ✓ Compiled /_error in 2.9s (2392 modules)

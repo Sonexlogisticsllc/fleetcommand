@@ -1,0 +1,317 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Global */
+    --color-bg: #080808;
+    --color-bg-2: #0F0F0F;
+    --color-bg-3: #141414;
+    --color-panel: rgba(255,255,255,0.04);
+    --color-border: rgba(255,255,255,0.08);
+    /* Dispatcher — Blue/Cyan */
+    --color-primary: #FF6B35;
+    --color-primary-glow: rgba(255,107,53,0.25);
+    --color-accent: #FF8C5A;
+    --color-sidebar-bg: #0F0F0F;
+    --color-sidebar-active-bg: rgba(255,107,53,0.12);
+    --color-sidebar-active-text: #FF9A5C;
+  }
+
+  [data-portal="owner"] {
+    --color-primary: #10B981;
+    --color-primary-glow: rgba(16,185,129,0.25);
+    --color-accent: #14B8A6;
+    --color-sidebar-bg: #071210;
+    --color-sidebar-active-bg: rgba(16,185,129,0.12);
+    --color-sidebar-active-text: #34D399;
+  }
+
+  [data-portal="sales"] {
+    --color-primary: #8B5CF6;
+    --color-primary-glow: rgba(139,92,246,0.25);
+    --color-accent: #EC4899;
+    --color-sidebar-bg: #0D0820;
+    --color-sidebar-active-bg: rgba(139,92,246,0.12);
+    --color-sidebar-active-text: #A78BFA;
+  }
+
+  /* ── Sonex Dispatch Hub (Amber/Gold) ─── */
+  [data-portal="sonex"] {
+    --color-bg: #080808;
+    --color-bg-2: #0F0F0F;
+    --color-bg-3: #141414;
+    --color-panel: rgba(255,255,255,0.04);
+    --color-border: rgba(255,255,255,0.08);
+    --color-border-hover: rgba(255,255,255,0.18);
+    --color-primary: #FF6B35;
+    --color-primary-dark: #E55A22;
+    --color-primary-glow: rgba(255,107,53,0.25);
+    --color-accent: #FF8C5A;
+    --color-text: #F5F5F7;
+    --color-muted: #A1A1A6;
+    --color-subtle: #636366;
+    --color-sidebar-bg: #0F0F0F;
+    --color-sidebar-active-bg: rgba(255,107,53,0.12);
+    --color-sidebar-active-text: #FF9A5C;
+  }
+
+  /* ── Carrier Portal (same amber, lighter) ─── */
+  [data-portal="carrier"] {
+    --color-bg: #080808;
+    --color-bg-2: #0F0F0F;
+    --color-bg-3: #141414;
+    --color-panel: rgba(255,255,255,0.04);
+    --color-border: rgba(255,255,255,0.08);
+    --color-border-hover: rgba(255,255,255,0.18);
+    --color-primary: #FF6B35;
+    --color-primary-dark: #E55A22;
+    --color-primary-glow: rgba(255,107,53,0.25);
+    --color-accent: #FF8C5A;
+    --color-text: #F5F5F7;
+    --color-muted: #A1A1A6;
+    --color-subtle: #636366;
+    --color-sidebar-bg: #0F0F0F;
+    --color-sidebar-active-bg: rgba(255,107,53,0.12);
+    --color-sidebar-active-text: #FF9A5C;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: #080808;
+    color: #F5F5F7;
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: #080808; }
+  ::-webkit-scrollbar-thumb { background: #2C2C2E; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--color-primary, #FF6B35); }
+}
+
+@layer components {
+
+  /* ── Glassmorphism Cards ───────────────────────────── */
+  .glass-card {
+    background: var(--color-panel, rgba(255,255,255,0.04));
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--color-border, rgba(255,255,255,0.08));
+    border-radius: 16px;
+  }
+
+  .glass-card-elevated {
+    background: rgba(15, 15, 15, 0.86);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--color-border-hover, rgba(255,255,255,0.18));
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+
+  .glass-sales {
+    background: rgba(20, 8, 40, 0.6);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(139, 92, 246, 0.15);
+    border-radius: 16px;
+  }
+
+  .glass-owner {
+    background: rgba(7, 26, 18, 0.6);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(16, 185, 129, 0.12);
+    border-radius: 16px;
+  }
+
+  /* ── Gradient Borders ──────────────────────────────── */
+  .gradient-border-blue {
+    position: relative;
+    border-radius: 16px;
+  }
+  .gradient-border-blue::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 16px;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(59,130,246,0.5), rgba(6,182,212,0.2), transparent);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  .gradient-border-emerald {
+    position: relative;
+    border-radius: 16px;
+  }
+  .gradient-border-emerald::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 16px;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(16,185,129,0.5), rgba(20,184,166,0.2), transparent);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  .gradient-border-violet {
+    position: relative;
+    border-radius: 16px;
+  }
+  .gradient-border-violet::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 16px;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(139,92,246,0.5), rgba(236,72,153,0.2), transparent);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  /* ── Sidebar ───────────────────────────────────────── */
+  .sidebar-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-500
+           hover:text-slate-200 transition-all duration-200
+           text-sm font-medium cursor-pointer;
+    background: transparent;
+  }
+  .sidebar-item:hover {
+    background: rgba(255,255,255,0.04);
+  }
+  .sidebar-item.active {
+    background: var(--color-sidebar-active-bg, rgba(59,130,246,0.12));
+    color: var(--color-sidebar-active-text, #60A5FA);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .sidebar-item.active-dispatcher {
+    background: rgba(59,130,246,0.12);
+    color: #60A5FA;
+    border: 1px solid rgba(59,130,246,0.2);
+  }
+  .sidebar-item.active-owner {
+    background: rgba(16,185,129,0.12);
+    color: #34D399;
+    border: 1px solid rgba(16,185,129,0.2);
+  }
+  .sidebar-item.active-sales {
+    background: rgba(139,92,246,0.12);
+    color: #A78BFA;
+    border: 1px solid rgba(139,92,246,0.2);
+  }
+
+  /* ── Status Dots ───────────────────────────────────── */
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  /* ── Metric Typography ─────────────────────────────── */
+  .metric-value { @apply text-2xl font-bold text-white; }
+  .metric-label { @apply text-xs font-semibold text-slate-500 uppercase tracking-wider; }
+
+  /* ── Table ─────────────────────────────────────────── */
+  .table-row-hover {
+    @apply hover:bg-white/[0.03] transition-colors duration-150 cursor-pointer;
+  }
+
+  /* ── Shimmer ───────────────────────────────────────── */
+  .shimmer {
+    background: linear-gradient(90deg, #0D1F3C 25%, #1A2F4A 50%, #0D1F3C 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+
+  /* ── Neon underlines ───────────────────────────────── */
+  .amber-underline::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, #F59E0B, transparent);
+    border-radius: 1px;
+  }
+
+  /* ── Portal Hero Orbs ──────────────────────────────── */
+  .hero-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    pointer-events: none;
+    opacity: 0.35;
+  }
+
+  /* ── Input Styles ──────────────────────────────────── */
+  .input-primary {
+    @apply w-full bg-white/[0.05] border border-white/10 rounded-xl px-4 py-3
+           text-white placeholder-slate-600 text-sm
+           focus:outline-none focus:ring-2 transition-all duration-200;
+    focus-ring-color: var(--color-primary, #FF6B35);
+  }
+  .input-primary:focus {
+    border-color: var(--color-primary, #3B82F6);
+    box-shadow: 0 0 0 3px var(--color-primary-glow, rgba(59,130,246,0.2));
+  }
+
+  /* ── Button Styles ─────────────────────────────────── */
+  .btn-primary {
+    @apply flex items-center justify-center gap-2 px-5 py-2.5 rounded-full
+           font-semibold text-sm text-white transition-all duration-200
+           active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+    background: linear-gradient(135deg, var(--color-primary, #FF6B35), var(--color-accent, #FF8C5A));
+    font-family: 'Montserrat', 'Inter', system-ui, sans-serif;
+  }
+  .btn-primary:hover:not(:disabled) {
+    filter: brightness(1.15);
+    box-shadow: 0 8px 32px var(--color-primary-glow, rgba(255,107,53,0.3));
+  }
+
+  /* ── Waveform bars (AI call) ───────────────────────── */
+  .waveform-bar {
+    width: 3px;
+    border-radius: 2px;
+    animation: waveform 0.8s ease-in-out infinite alternate;
+    background: var(--color-primary, #8B5CF6);
+  }
+  .waveform-bar:nth-child(2) { animation-delay: 0.1s; }
+  .waveform-bar:nth-child(3) { animation-delay: 0.2s; }
+  .waveform-bar:nth-child(4) { animation-delay: 0.3s; }
+  .waveform-bar:nth-child(5) { animation-delay: 0.4s; }
+  .waveform-bar:nth-child(6) { animation-delay: 0.3s; }
+  .waveform-bar:nth-child(7) { animation-delay: 0.2s; }
+  .waveform-bar:nth-child(8) { animation-delay: 0.1s; }
+
+  @keyframes waveform {
+    0% { height: 4px; }
+    100% { height: 24px; }
+  }
+}
