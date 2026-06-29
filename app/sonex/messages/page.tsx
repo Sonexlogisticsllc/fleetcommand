@@ -3,13 +3,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Search, Send, Paperclip, MessageSquare, Check, CheckCheck,
-  Image as ImageIcon, FileText, ChevronRight, Circle
+  Image as ImageIcon, FileText, ChevronRight, Circle, RefreshCw
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { SonexCarrier, SonexMessage } from '@/lib/sonexTypes';
 import {
   getCarriers, getMessages, addMessage, markMessagesRead, getUnreadCountForCarrier, getAllMessages
 } from '@/lib/sonexStore';
+import { uploadFile } from '@/lib/storageUtils';
 import { useSonexAuth } from '@/lib/sonexAuth';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -184,12 +185,19 @@ export default function MessagesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const refreshAll = useCallback(() => {
-    getCarriers().then(setCarriers);
-    getAllMessages().then(setAllMessages);
+  const refreshAll = useCallback(async () => {
+    const [c, m] = await Promise.all([getCarriers(), getAllMessages()]);
+    setCarriers(c);
+    setAllMessages(m);
   }, []);
 
   useEffect(() => { refreshAll(); }, [refreshAll]);
+
+  // Poll for new messages every 10s
+  useEffect(() => {
+    const t = setInterval(() => refreshAll(), 10000);
+    return () => clearInterval(t);
+  }, [refreshAll]);
 
   // Update thread when selectedCarrierId changes
   useEffect(() => {
@@ -261,12 +269,11 @@ export default function MessagesPage() {
     }
   };
 
-  const handleAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAttach = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedCarrierId) return;
-    const reader = new FileReader();
-    reader.onload = async ev => {
-      const url = ev.target?.result as string;
+    try {
+      const result = await uploadFile(file, 'message-attachments', `admin/${selectedCarrierId}`);
       const isImage = file.type.startsWith('image/');
       const msg = await addMessage({
         carrierId: selectedCarrierId,
@@ -274,16 +281,17 @@ export default function MessagesPage() {
         senderName: 'Sonex Dispatch',
         senderRole: 'admin',
         messageText: file.name,
-        attachmentUrl: url,
+        attachmentUrl: result.url,
         attachmentType: isImage ? 'image' : 'document',
         read: false,
         createdAt: new Date().toISOString(),
       });
       setThread(prev => [...prev, msg]);
       refreshAll();
-      toast.success('File attached');
-    };
-    reader.readAsDataURL(file);
+      toast.success(isImage ? 'Image sent!' : 'Document sent!');
+    } catch {
+      toast.error('Upload failed. Please try again.');
+    }
     e.target.value = '';
   };
 

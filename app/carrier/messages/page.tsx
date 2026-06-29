@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, Camera, CheckCheck } from 'lucide-react';
+import { Send, Camera, CheckCheck, Paperclip, FileText, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useSonexAuth } from '@/lib/sonexAuth';
 import { getMessages, addMessage, markMessagesRead } from '@/lib/sonexStore';
+import { uploadFile } from '@/lib/storageUtils';
 import type { SonexMessage } from '@/lib/sonexTypes';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -30,13 +31,8 @@ function fmtDay(iso: string) {
   return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 }
 
-function toBase64(file: File): Promise<string> {
-  return new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(r.result as string);
-    r.onerror = rej;
-    r.readAsDataURL(file);
-  });
+function isImageFile(filename: string): boolean {
+  return /\.(jpg|jpeg|png|gif|webp)$/i.test(filename);
 }
 
 // Group messages by day for date separators
@@ -59,7 +55,7 @@ function groupByDay(messages: SonexMessage[]): Array<{ day: string; messages: So
 function MessageBubble({ msg, isCarrier }: { msg: SonexMessage; isCarrier: boolean }) {
   return (
     <div className={`flex ${isCarrier ? 'justify-end' : 'justify-start'} px-1`}>
-      <div className="max-w-[78%]">
+      <div className="max-w-[80%]">
         {!isCarrier && (
           <div className="text-[10px] text-slate-500 mb-1 ml-1 font-semibold">{msg.senderName}</div>
         )}
@@ -82,9 +78,18 @@ function MessageBubble({ msg, isCarrier }: { msg: SonexMessage; isCarrier: boole
               <img
                 src={msg.attachmentUrl}
                 alt="Attachment"
-                className="rounded-xl max-w-full max-h-48 object-cover"
+                className="rounded-xl max-w-full max-h-56 object-cover cursor-pointer"
+                onClick={() => window.open(msg.attachmentUrl, '_blank')}
               />
             </div>
+          )}
+          {msg.attachmentUrl && msg.attachmentType === 'document' && (
+            <a href={msg.attachmentUrl} target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-2 mb-2 px-3 py-2 rounded-lg text-xs hover:opacity-80 transition-opacity"
+              style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}>
+              <FileText size={14} className="text-amber-400 flex-shrink-0" />
+              <span className="truncate text-slate-300">View Document</span>
+            </a>
           )}
           {msg.messageText && <span>{msg.messageText}</span>}
         </div>
@@ -121,13 +126,16 @@ export default function CarrierMessagesPage() {
   const [messages, setMessages] = useState<SonexMessage[]>([]);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const photoRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback(async () => {
     if (!carrierId) return;
-    getMessages(carrierId).then(setMessages);
+    const msgs = await getMessages(carrierId);
+    setMessages(msgs);
   }, [carrierId]);
 
   // On mount: mark admin messages as read + load
@@ -135,6 +143,12 @@ export default function CarrierMessagesPage() {
     if (!carrierId) return;
     markMessagesRead(carrierId, 'carrier').then(() => refresh());
   }, [carrierId, refresh]);
+
+  // Poll every 10s for new messages
+  useEffect(() => {
+    const timer = setInterval(() => refresh(), 10000);
+    return () => clearInterval(timer);
+  }, [refresh]);
 
   // Auto-scroll to bottom whenever messages change
   useEffect(() => {
@@ -159,10 +173,7 @@ export default function CarrierMessagesPage() {
       });
       setText('');
       refresh();
-      // Reset textarea height
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
-      }
+      if (textareaRef.current) textareaRef.current.style.height = 'auto';
     } catch {
       toast.error('Failed to send message.');
     } finally {
@@ -170,30 +181,32 @@ export default function CarrierMessagesPage() {
     }
   }
 
-  async function handlePhotoSend(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileAttach(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setSending(true);
+    setUploadingFile(true);
     try {
-      const url = await toBase64(file);
+      const isImg = isImageFile(file.name);
+      const result = await uploadFile(file, 'message-attachments', `${carrierId}`);
       await addMessage({
         carrierId,
         senderId: carrierId,
         senderName: carrierName,
         senderRole: 'carrier',
         messageText: text.trim() || '',
-        attachmentUrl: url,
-        attachmentType: 'image',
+        attachmentUrl: result.url,
+        attachmentType: isImg ? 'image' : 'document',
         read: false,
         createdAt: new Date().toISOString(),
       });
       setText('');
       refresh();
-      toast.success('Photo sent!');
+      toast.success(isImg ? 'Photo sent!' : 'Document sent!');
     } catch {
-      toast.error('Failed to send photo.');
+      toast.error('Upload failed. Please try again.');
     } finally {
-      setSending(false);
+      setUploadingFile(false);
+      if (fileRef.current) fileRef.current.value = '';
       if (photoRef.current) photoRef.current.value = '';
     }
   }
@@ -284,7 +297,7 @@ export default function CarrierMessagesPage() {
             accept="image/*"
             capture="environment"
             className="hidden"
-            onChange={handlePhotoSend}
+            onChange={handleFileAttach}
           />
           <button
             onClick={() => photoRef.current?.click()}

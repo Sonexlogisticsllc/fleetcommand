@@ -3,7 +3,8 @@
 
 import type {
   SonexCarrier, SonexLoad, SonexLoadCheckin, SonexCargoPhoto,
-  SonexMessage, SonexSettlement, SonexSettings,
+  SonexDocument, SonexMessage, SonexSettlement, SonexSettings,
+  DocType,
 } from './sonexTypes';
 import { supabase } from './supabaseClient';
 
@@ -498,6 +499,134 @@ export async function addCargoPhoto(data: Omit<SonexCargoPhoto, 'id'>): Promise<
     uploadedAt: inserted.uploaded_at,
     uploadedBy: inserted.uploaded_by,
   };
+}
+
+// ─── Carrier Documents ────────────────────────────────────────────────────────
+
+export function computeDocStatus(expirationDate?: string): 'valid' | 'expiring_soon' | 'expired' | 'missing' {
+  if (!expirationDate) return 'valid';
+  const exp = new Date(expirationDate);
+  const now = new Date();
+  const daysUntil = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  if (daysUntil < 0) return 'expired';
+  if (daysUntil <= 30) return 'expiring_soon';
+  return 'valid';
+}
+
+export async function getDocuments(carrierId?: string): Promise<SonexDocument[]> {
+  let query = supabase.from('carrier_documents').select('*');
+  if (carrierId) query = query.eq('carrier_id', carrierId);
+  const { data, error } = await query.order('uploaded_at', { ascending: false });
+  if (error) {
+    console.error('Error fetching documents:', error);
+    return [];
+  }
+  return (data || []).map(d => ({
+    id: d.id,
+    carrierId: d.carrier_id,
+    docType: d.doc_type as DocType,
+    fileName: d.file_name,
+    fileUrl: d.file_url,
+    filePath: d.file_path || '',
+    expirationDate: d.expiration_date || undefined,
+    uploadedAt: d.uploaded_at,
+    uploadedBy: d.uploaded_by,
+    notes: d.notes || undefined,
+  }));
+}
+
+export async function addDocument(data: Omit<SonexDocument, 'id'>): Promise<SonexDocument> {
+  // Upsert: replace existing doc of same type for same carrier
+  const { data: inserted, error } = await supabase
+    .from('carrier_documents')
+    .upsert([{
+      carrier_id: data.carrierId,
+      doc_type: data.docType,
+      file_name: data.fileName,
+      file_url: data.fileUrl,
+      file_path: data.filePath,
+      expiration_date: data.expirationDate || null,
+      uploaded_at: data.uploadedAt || new Date().toISOString(),
+      uploaded_by: data.uploadedBy,
+      notes: data.notes || null,
+    }], { onConflict: 'carrier_id,doc_type' })
+    .select()
+    .single();
+  if (error) {
+    console.error('Error adding document:', error);
+    throw error;
+  }
+  return {
+    id: inserted.id,
+    carrierId: inserted.carrier_id,
+    docType: inserted.doc_type as DocType,
+    fileName: inserted.file_name,
+    fileUrl: inserted.file_url,
+    filePath: inserted.file_path || '',
+    expirationDate: inserted.expiration_date || undefined,
+    uploadedAt: inserted.uploaded_at,
+    uploadedBy: inserted.uploaded_by,
+    notes: inserted.notes || undefined,
+  };
+}
+
+export async function updateDocument(id: string, data: Partial<SonexDocument>): Promise<SonexDocument | null> {
+  const dbData: any = {};
+  if (data.fileName !== undefined) dbData.file_name = data.fileName;
+  if (data.fileUrl !== undefined) dbData.file_url = data.fileUrl;
+  if (data.filePath !== undefined) dbData.file_path = data.filePath;
+  if (data.expirationDate !== undefined) dbData.expiration_date = data.expirationDate;
+  if (data.notes !== undefined) dbData.notes = data.notes;
+  dbData.uploaded_at = new Date().toISOString();
+
+  const { data: updated, error } = await supabase
+    .from('carrier_documents')
+    .update(dbData)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) {
+    console.error('Error updating document:', error);
+    return null;
+  }
+  return {
+    id: updated.id,
+    carrierId: updated.carrier_id,
+    docType: updated.doc_type as DocType,
+    fileName: updated.file_name,
+    fileUrl: updated.file_url,
+    filePath: updated.file_path || '',
+    expirationDate: updated.expiration_date || undefined,
+    uploadedAt: updated.uploaded_at,
+    uploadedBy: updated.uploaded_by,
+    notes: updated.notes || undefined,
+  };
+}
+
+export async function deleteDocument(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('carrier_documents')
+    .delete()
+    .eq('id', id);
+  if (error) {
+    console.error('Error deleting document:', error);
+    throw error;
+  }
+}
+
+export async function getExpiringDocuments(withinDays = 30): Promise<SonexDocument[]> {
+  const docs = await getDocuments();
+  const now = new Date();
+  return docs.filter(d => {
+    if (!d.expirationDate) return false;
+    const exp = new Date(d.expirationDate);
+    const daysUntil = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    return daysUntil <= withinDays; // includes already expired (negative days)
+  }).sort((a, b) => {
+    const da = new Date(a.expirationDate!).getTime();
+    const db = new Date(b.expirationDate!).getTime();
+    return da - db;
+  });
 }
 
 // ─── Messages ─────────────────────────────────────────────────────────────────

@@ -32,9 +32,89 @@ export type CheckinEvent =
   | 'arrived_pickup'
   | 'loaded_departing'
   | 'arrived_delivery'
-  | 'delivered';
+  | 'delivered'
+  | 'detention_start'
+  | 'detention_end'
+  | 'layover_start'
+  | 'layover_end'
+  | 'tonu'
+  | 'breakdown'
+  | 'accident';
 
 export type SonexRole = 'admin' | 'carrier';
+
+export type DocType =
+  | 'drivers_license_front'
+  | 'drivers_license_back'
+  | 'cdl_front'
+  | 'cdl_back'
+  | 'medical_card'
+  | 'mvr'
+  | 'truck_registration'
+  | 'trailer_registration'
+  | 'dot_inspection'
+  | 'coi'          // Certificate of Insurance
+  | 'w9'
+  | 'dispatch_agreement'
+  | 'mc_lease'
+  | 'drug_test'
+  | 'background_check'
+  | 'void_check'
+  | 'eld_certificate';
+
+export type DocStatus = 'valid' | 'expiring_soon' | 'expired' | 'missing';
+
+export const DOCS_WITH_EXPIRY: DocType[] = [
+  'drivers_license_front', 'drivers_license_back',
+  'cdl_front', 'cdl_back',
+  'medical_card', 'mvr',
+  'truck_registration', 'trailer_registration',
+  'dot_inspection', 'coi', 'drug_test',
+];
+
+export const DOC_TYPE_LABELS: Record<DocType, string> = {
+  drivers_license_front: "Driver's License (Front)",
+  drivers_license_back:  "Driver's License (Back)",
+  cdl_front:             'CDL (Front)',
+  cdl_back:              'CDL (Back)',
+  medical_card:          'Medical Card',
+  mvr:                   'Motor Vehicle Record',
+  truck_registration:    'Truck Registration',
+  trailer_registration:  'Trailer Registration',
+  dot_inspection:        'DOT Inspection',
+  coi:                   'Certificate of Insurance',
+  w9:                    'W-9 Form',
+  dispatch_agreement:    'Dispatch Agreement',
+  mc_lease:              'MC Lease Agreement',
+  drug_test:             'Drug Test',
+  background_check:      'Background Check',
+  void_check:            'Voided Check (Direct Deposit)',
+  eld_certificate:       'ELD Certificate',
+};
+
+export const ALL_DOC_TYPES: DocType[] = [
+  'drivers_license_front', 'drivers_license_back',
+  'cdl_front', 'cdl_back',
+  'medical_card', 'mvr',
+  'truck_registration', 'trailer_registration',
+  'dot_inspection', 'coi', 'w9',
+  'dispatch_agreement', 'mc_lease',
+  'drug_test', 'background_check',
+  'void_check', 'eld_certificate',
+];
+
+export interface SonexDocument {
+  id: string;
+  carrierId: string;
+  docType: DocType;
+  fileName: string;
+  fileUrl: string;       // Supabase Storage public URL
+  filePath: string;      // Storage path for deletion
+  expirationDate?: string;  // ISO date, for docs that expire
+  uploadedAt: string;
+  uploadedBy: 'admin' | 'carrier';
+  notes?: string;
+}
 
 // ─── Core Entities ────────────────────────────────────────────────────────────
 
@@ -220,6 +300,7 @@ export interface SonexStoreData {
   loads: SonexLoad[];
   checkins: SonexLoadCheckin[];
   cargoPhotos: SonexCargoPhoto[];
+  documents: SonexDocument[];
   messages: SonexMessage[];
   settlements: SonexSettlement[];
   settings: SonexSettings;
@@ -263,8 +344,15 @@ export const INSURANCE_TYPE_LABELS: Record<InsuranceType, string> = {
 };
 
 export const CHECKIN_EVENT_LABELS: Record<CheckinEvent, string> = {
-  arrived_pickup: 'Arrived at Pickup',
+  arrived_pickup:   'Arrived at Pickup',
   loaded_departing: 'Loaded — Departing',
   arrived_delivery: 'Arrived at Delivery',
-  delivered: 'Delivered',
+  delivered:        'Delivered',
+  detention_start:  'Detention Started',
+  detention_end:    'Detention Ended',
+  layover_start:    'Layover Started',
+  layover_end:      'Layover Ended',
+  tonu:             'TONU (Truck Ordered Not Used)',
+  breakdown:        'Breakdown Reported',
+  accident:         'Accident Reported',
 };

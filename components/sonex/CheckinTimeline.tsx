@@ -5,10 +5,18 @@ import type { SonexLoadCheckin, CheckinEvent } from '@/lib/sonexTypes';
 import { CHECKIN_EVENT_LABELS } from '@/lib/sonexTypes';
 
 const EVENT_CONFIG: Record<CheckinEvent, { icon: React.ElementType; color: string; bg: string }> = {
-  arrived_pickup:    { icon: Truck,        color: '#F59E0B', bg: 'rgba(245,158,11,0.15)' },
-  loaded_departing:  { icon: PackageCheck, color: '#06B6D4', bg: 'rgba(6,182,212,0.15)' },
-  arrived_delivery:  { icon: MapPin,       color: '#8B5CF6', bg: 'rgba(139,92,246,0.15)' },
-  delivered:         { icon: Flag,         color: '#10B981', bg: 'rgba(16,185,129,0.15)' },
+  arrived_pickup:   { icon: Truck,        color: '#F59E0B', bg: 'rgba(245,158,11,0.15)' },
+  loaded_departing: { icon: PackageCheck, color: '#06B6D4', bg: 'rgba(6,182,212,0.15)' },
+  arrived_delivery: { icon: MapPin,       color: '#8B5CF6', bg: 'rgba(139,92,246,0.15)' },
+  delivered:        { icon: Flag,         color: '#10B981', bg: 'rgba(16,185,129,0.15)' },
+  // Extended events — shown in timeline but not in ALL_EVENTS pipeline
+  detention_start:  { icon: Clock,        color: '#F97316', bg: 'rgba(249,115,22,0.15)' },
+  detention_end:    { icon: Clock,        color: '#F97316', bg: 'rgba(249,115,22,0.15)' },
+  layover_start:    { icon: Clock,        color: '#A855F7', bg: 'rgba(168,85,247,0.15)' },
+  layover_end:      { icon: Clock,        color: '#A855F7', bg: 'rgba(168,85,247,0.15)' },
+  tonu:             { icon: Clock,        color: '#EF4444', bg: 'rgba(239,68,68,0.15)'  },
+  breakdown:        { icon: Clock,        color: '#EF4444', bg: 'rgba(239,68,68,0.15)'  },
+  accident:         { icon: Clock,        color: '#DC2626', bg: 'rgba(220,38,38,0.15)'  },
 };
 
 function formatTimestamp(ts: string): string {
