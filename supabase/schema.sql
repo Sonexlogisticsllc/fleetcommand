@@ -2,7 +2,7 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ─── 1. CARRIERS TABLE ────────────────────────────────────────────────────────
-CREATE TABLE public.carriers (
+CREATE TABLE IF NOT EXISTS public.carriers (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     first_name text NOT NULL,
     last_name text NOT NULL,
@@ -44,8 +44,7 @@ CREATE TABLE public.carriers (
 );
 
 -- ─── 2. USERS (PROFILES) TABLE ────────────────────────────────────────────────
--- Maps public user roles and profiles to Supabase Auth auth.users
-CREATE TABLE public.users (
+CREATE TABLE IF NOT EXISTS public.users (
     id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     email text UNIQUE NOT NULL,
     role text NOT NULL CHECK (role IN ('admin', 'carrier')),
@@ -57,7 +56,7 @@ CREATE TABLE public.users (
 );
 
 -- ─── 3. LOADS TABLE ───────────────────────────────────────────────────────────
-CREATE TABLE public.loads (
+CREATE TABLE IF NOT EXISTS public.loads (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     load_number text UNIQUE NOT NULL,
     carrier_id uuid REFERENCES public.carriers(id) ON DELETE CASCADE,
@@ -100,7 +99,7 @@ CREATE TABLE public.loads (
 );
 
 -- ─── 4. LOAD CHECK-INS TABLE ──────────────────────────────────────────────────
-CREATE TABLE public.load_checkins (
+CREATE TABLE IF NOT EXISTS public.load_checkins (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     load_id uuid REFERENCES public.loads(id) ON DELETE CASCADE NOT NULL,
     event text NOT NULL,
@@ -110,7 +109,7 @@ CREATE TABLE public.load_checkins (
 );
 
 -- ─── 5. CARGO PHOTOS TABLE ────────────────────────────────────────────────────
-CREATE TABLE public.cargo_photos (
+CREATE TABLE IF NOT EXISTS public.cargo_photos (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     load_id uuid REFERENCES public.loads(id) ON DELETE CASCADE NOT NULL,
     url text NOT NULL,
@@ -121,10 +120,10 @@ CREATE TABLE public.cargo_photos (
 );
 
 -- ─── 6. MESSAGES TABLE ────────────────────────────────────────────────────────
-CREATE TABLE public.messages (
+CREATE TABLE IF NOT EXISTS public.messages (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     carrier_id uuid REFERENCES public.carriers(id) ON DELETE CASCADE NOT NULL,
-    sender_id uuid, -- Can reference public.users(id) or public.carriers(id) or remain null for system
+    sender_id uuid,
     sender_name text NOT NULL,
     sender_role text NOT NULL CHECK (sender_role IN ('admin', 'carrier')),
     message_text text NOT NULL,
@@ -135,7 +134,7 @@ CREATE TABLE public.messages (
 );
 
 -- ─── 7. SETTLEMENTS TABLE ────────────────────────────────────────────────────
-CREATE TABLE public.settlements (
+CREATE TABLE IF NOT EXISTS public.settlements (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     carrier_id uuid REFERENCES public.carriers(id) ON DELETE CASCADE NOT NULL,
     period_start date NOT NULL,
@@ -148,7 +147,7 @@ CREATE TABLE public.settlements (
 );
 
 -- ─── 8. SYSTEM SETTINGS TABLE ────────────────────────────────────────────────
-CREATE TABLE public.settings (
+CREATE TABLE IF NOT EXISTS public.settings (
     id integer PRIMARY KEY DEFAULT 1 CHECK (id = 1),
     company_name text NOT NULL,
     company_address text,
@@ -172,7 +171,6 @@ INSERT INTO public.settings (
 
 -- ─── ROW LEVEL SECURITY (RLS) POLICIES ────────────────────────────────────────
 
--- Enable RLS on all tables
 ALTER TABLE public.carriers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.loads ENABLE ROW LEVEL SECURITY;
@@ -182,7 +180,6 @@ ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.settlements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
 
--- Role / Carrier context functions
 CREATE OR REPLACE FUNCTION public.get_my_role()
 RETURNS text AS $$
   SELECT role FROM public.users WHERE id = auth.uid();
@@ -193,92 +190,53 @@ RETURNS uuid AS $$
   SELECT carrier_id FROM public.users WHERE id = auth.uid();
 $$ LANGUAGE sql SECURITY DEFINER;
 
+-- Drop existing policies to prevent conflicts
+DROP POLICY IF EXISTS "Admins have full access on users" ON public.users;
+DROP POLICY IF EXISTS "Users can read their own profile" ON public.users;
+DROP POLICY IF EXISTS "Admins have full access on carriers" ON public.carriers;
+DROP POLICY IF EXISTS "Carriers can view their own profile" ON public.carriers;
+DROP POLICY IF EXISTS "Admins have full access on loads" ON public.loads;
+DROP POLICY IF EXISTS "Carriers can view their own loads" ON public.loads;
+DROP POLICY IF EXISTS "Carriers can update their own loads" ON public.loads;
+DROP POLICY IF EXISTS "Admins have full access on load_checkins" ON public.load_checkins;
+DROP POLICY IF EXISTS "Carriers can view check-ins of their own loads" ON public.load_checkins;
+DROP POLICY IF EXISTS "Carriers can add check-ins for their own loads" ON public.load_checkins;
+DROP POLICY IF EXISTS "Admins have full access on cargo_photos" ON public.cargo_photos;
+DROP POLICY IF EXISTS "Carriers can view cargo photos of their own loads" ON public.cargo_photos;
+DROP POLICY IF EXISTS "Carriers can upload cargo photos for their own loads" ON public.cargo_photos;
+DROP POLICY IF EXISTS "Admins have full access on messages" ON public.messages;
+DROP POLICY IF EXISTS "Carriers can view their own messages" ON public.messages;
+DROP POLICY IF EXISTS "Carriers can send messages in their thread" ON public.messages;
+DROP POLICY IF EXISTS "Admins have full access on settlements" ON public.settlements;
+DROP POLICY IF EXISTS "Carriers can view their own settlements" ON public.settlements;
+DROP POLICY IF EXISTS "Anyone authenticated can read settings" ON public.settings;
+DROP POLICY IF EXISTS "Only admins can update settings" ON public.settings;
 
--- ─── Policies for public.users
-CREATE POLICY "Admins have full access on users" ON public.users
-  FOR ALL TO authenticated USING (public.get_my_role() = 'admin');
-
-CREATE POLICY "Users can read their own profile" ON public.users
-  FOR SELECT TO authenticated USING (id = auth.uid());
-
-
--- ─── Policies for public.carriers
-CREATE POLICY "Admins have full access on carriers" ON public.carriers
-  FOR ALL TO authenticated USING (public.get_my_role() = 'admin');
-
-CREATE POLICY "Carriers can view their own profile" ON public.carriers
-  FOR SELECT TO authenticated USING (id = public.get_my_carrier_id());
-
-
--- ─── Policies for public.loads
-CREATE POLICY "Admins have full access on loads" ON public.loads
-  FOR ALL TO authenticated USING (public.get_my_role() = 'admin');
-
-CREATE POLICY "Carriers can view their own loads" ON public.loads
-  FOR SELECT TO authenticated USING (carrier_id = public.get_my_carrier_id());
-
-CREATE POLICY "Carriers can update their own loads" ON public.loads
-  FOR UPDATE TO authenticated USING (carrier_id = public.get_my_carrier_id());
-
-
--- ─── Policies for public.load_checkins
-CREATE POLICY "Admins have full access on load_checkins" ON public.load_checkins
-  FOR ALL TO authenticated USING (public.get_my_role() = 'admin');
-
-CREATE POLICY "Carriers can view check-ins of their own loads" ON public.load_checkins
-  FOR SELECT TO authenticated USING (
-    load_id IN (SELECT id FROM public.loads WHERE carrier_id = public.get_my_carrier_id())
-  );
-
-CREATE POLICY "Carriers can add check-ins for their own loads" ON public.load_checkins
-  FOR INSERT TO authenticated WITH CHECK (
-    load_id IN (SELECT id FROM public.loads WHERE carrier_id = public.get_my_carrier_id())
-  );
-
-
--- ─── Policies for public.cargo_photos
-CREATE POLICY "Admins have full access on cargo_photos" ON public.cargo_photos
-  FOR ALL TO authenticated USING (public.get_my_role() = 'admin');
-
-CREATE POLICY "Carriers can view cargo photos of their own loads" ON public.cargo_photos
-  FOR SELECT TO authenticated USING (
-    load_id IN (SELECT id FROM public.loads WHERE carrier_id = public.get_my_carrier_id())
-  );
-
-CREATE POLICY "Carriers can upload cargo photos for their own loads" ON public.cargo_photos
-  FOR INSERT TO authenticated WITH CHECK (
-    load_id IN (SELECT id FROM public.loads WHERE carrier_id = public.get_my_carrier_id())
-  );
-
-
--- ─── Policies for public.messages
-CREATE POLICY "Admins have full access on messages" ON public.messages
-  FOR ALL TO authenticated USING (public.get_my_role() = 'admin');
-
-CREATE POLICY "Carriers can view their own messages" ON public.messages
-  FOR SELECT TO authenticated USING (carrier_id = public.get_my_carrier_id());
-
-CREATE POLICY "Carriers can send messages in their thread" ON public.messages
-  FOR INSERT TO authenticated WITH CHECK (carrier_id = public.get_my_carrier_id());
-
-
--- ─── Policies for public.settlements
-CREATE POLICY "Admins have full access on settlements" ON public.settlements
-  FOR ALL TO authenticated USING (public.get_my_role() = 'admin');
-
-CREATE POLICY "Carriers can view their own settlements" ON public.settlements
-  FOR SELECT TO authenticated USING (carrier_id = public.get_my_carrier_id());
-
-
--- ─── Policies for public.settings
-CREATE POLICY "Anyone authenticated can read settings" ON public.settings
-  FOR SELECT TO authenticated USING (true);
-
-CREATE POLICY "Only admins can update settings" ON public.settings
-  FOR UPDATE TO authenticated USING (public.get_my_role() = 'admin');
+-- Create policies
+CREATE POLICY "Admins have full access on users" ON public.users FOR ALL TO authenticated USING (public.get_my_role() = 'admin');
+CREATE POLICY "Users can read their own profile" ON public.users FOR SELECT TO authenticated USING (id = auth.uid());
+CREATE POLICY "Admins have full access on carriers" ON public.carriers FOR ALL TO authenticated USING (public.get_my_role() = 'admin');
+CREATE POLICY "Carriers can view their own profile" ON public.carriers FOR SELECT TO authenticated USING (id = public.get_my_carrier_id());
+CREATE POLICY "Admins have full access on loads" ON public.loads FOR ALL TO authenticated USING (public.get_my_role() = 'admin');
+CREATE POLICY "Carriers can view their own loads" ON public.loads FOR SELECT TO authenticated USING (carrier_id = public.get_my_carrier_id());
+CREATE POLICY "Carriers can update their own loads" ON public.loads FOR UPDATE TO authenticated USING (carrier_id = public.get_my_carrier_id());
+CREATE POLICY "Admins have full access on load_checkins" ON public.load_checkins FOR ALL TO authenticated USING (public.get_my_role() = 'admin');
+CREATE POLICY "Carriers can view check-ins of their own loads" ON public.load_checkins FOR SELECT TO authenticated USING (load_id IN (SELECT id FROM public.loads WHERE carrier_id = public.get_my_carrier_id()));
+CREATE POLICY "Carriers can add check-ins for their own loads" ON public.load_checkins FOR INSERT TO authenticated WITH CHECK (load_id IN (SELECT id FROM public.loads WHERE carrier_id = public.get_my_carrier_id()));
+CREATE POLICY "Admins have full access on cargo_photos" ON public.cargo_photos FOR ALL TO authenticated USING (public.get_my_role() = 'admin');
+CREATE POLICY "Carriers can view cargo photos of their own loads" ON public.cargo_photos FOR SELECT TO authenticated USING (load_id IN (SELECT id FROM public.loads WHERE carrier_id = public.get_my_carrier_id()));
+CREATE POLICY "Carriers can upload cargo photos for their own loads" ON public.cargo_photos FOR INSERT TO authenticated WITH CHECK (load_id IN (SELECT id FROM public.loads WHERE carrier_id = public.get_my_carrier_id()));
+CREATE POLICY "Admins have full access on messages" ON public.messages FOR ALL TO authenticated USING (public.get_my_role() = 'admin');
+CREATE POLICY "Carriers can view their own messages" ON public.messages FOR SELECT TO authenticated USING (carrier_id = public.get_my_carrier_id());
+CREATE POLICY "Carriers can send messages in their thread" ON public.messages FOR INSERT TO authenticated WITH CHECK (carrier_id = public.get_my_carrier_id());
+CREATE POLICY "Admins have full access on settlements" ON public.settlements FOR ALL TO authenticated USING (public.get_my_role() = 'admin');
+CREATE POLICY "Carriers can view their own settlements" ON public.settlements FOR SELECT TO authenticated USING (carrier_id = public.get_my_carrier_id());
+CREATE POLICY "Anyone authenticated can read settings" ON public.settings FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Only admins can update settings" ON public.settings FOR UPDATE TO authenticated USING (public.get_my_role() = 'admin');
 
 
 -- ─── 9. AUTH USER CREATED TRIGGER SYNC ────────────────────────────────────────
+
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
@@ -299,6 +257,10 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-CREATE OR REPLACE TRIGGER on_auth_user_created
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- Force schema reload
+NOTIFY pgrst, 'reload schema';

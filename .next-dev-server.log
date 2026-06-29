@@ -132,3 +132,44 @@
  ✓ Compiled /_not-found in 1987ms (2166 modules)
  ○ Compiling /_error ...
  ✓ Compiled /_error in 2.9s (2392 modules)
+ GET /sonex/login 200 in 127ms
+ GET /sonex 200 in 85ms
+ ✓ Compiled in 2.4s (2401 modules)
+   Reload env: .env.local
+ ✓ Compiled in 14.6s (2401 modules)
+ ✓ Compiled in 1065ms (2401 modules)
+ ✓ Compiled in 1696ms (2471 modules)
+ GET /sonex 200 in 243ms
+ GET /sonex/login 200 in 76ms
+ ✓ Compiled /favicon.ico in 460ms (1235 modules)
+ GET /favicon.ico 200 in 713ms
+ GET /favicon.ico 200 in 770ms
+ ✓ Compiled in 890ms (2502 modules)
+ GET /sonex/login 200 in 260ms
+ GET /favicon.ico 200 in 29ms
+ ✓ Compiled in 660ms (2502 modules)
+ ✓ Compiled in 257ms (1268 modules)
+ ✓ Compiled in 812ms (1282 modules)
+ ✓ Compiled in 512ms (1282 modules)
+ ✓ Compiled in 390ms (1282 modules)
+ ✓ Compiled in 1949ms (2484 modules)
+ ✓ Compiled in 706ms (2484 modules)
+ ✓ Compiled in 494ms (1282 modules)
+ ✓ Compiled in 694ms (2484 modules)
+ ✓ Compiled in 457ms (1282 modules)
+ ✓ Compiled in 652ms (2484 modules)
+ ✓ Compiled in 435ms (1282 modules)
+ ✓ Compiled in 1606ms (2484 modules)
+ ✓ Compiled in 379ms (1282 modules)
+ ✓ Compiled in 341ms (1282 modules)
+ ✓ Compiled in 313ms (1282 modules)
+ ✓ Compiled in 295ms (1282 modules)
+ ✓ Compiled in 298ms (1282 modules)
+ ✓ Compiled in 374ms (1282 modules)
+ ✓ Compiled in 335ms (1282 modules)
+ ✓ Compiled in 1763ms (2485 modules)
+ ✓ Compiled in 401ms (1282 modules)
+ ✓ Compiled in 300ms (1282 modules)
+ ✓ Compiled in 749ms (2485 modules)
+ ✓ Compiled in 322ms (1282 modules)
+ ✓ Compiled in 380ms (1282 modules)
