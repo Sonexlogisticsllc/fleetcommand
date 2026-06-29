@@ -96,17 +96,19 @@ export default function CarrierProfilePage() {
   const [carrier, setCarrier] = useState<SonexCarrier | null>(null);
   const [loads, setLoads] = useState<SonexLoad[]>([]);
   const [tab, setTab] = useState<Tab>('Overview');
-  const [stats, setStats] = useState<ReturnType<typeof getCarrierStats> | null>(null);
+  const [stats, setStats] = useState<Awaited<ReturnType<typeof getCarrierStats>> | null>(null);
 
-  const reload = () => {
-    const found = getCarrier(carrierId);
+  const reload = async () => {
+    const found = await getCarrier(carrierId);
     if (!found) {
       router.push('/sonex/carriers');
       return;
     }
     setCarrier(found);
-    setLoads(getLoadsByCarrier(carrierId));
-    setStats(getCarrierStats(carrierId));
+    const carrierLoads = await getLoadsByCarrier(carrierId);
+    setLoads(carrierLoads);
+    const carrierStats = await getCarrierStats(carrierId);
+    setStats(carrierStats);
   };
 
   useEffect(() => { reload(); }, [carrierId]);
@@ -126,8 +128,8 @@ export default function CarrierProfilePage() {
     );
   }
 
-  const save = (field: keyof SonexCarrier, value: string | number) => {
-    const updated = updateCarrier(carrierId, { [field]: value });
+  const save = async (field: keyof SonexCarrier, value: string | number) => {
+    const updated = await updateCarrier(carrierId, { [field]: value });
     if (!updated) return;
     setCarrier(updated);
     toast.success('Saved');
@@ -238,7 +240,6 @@ export default function CarrierProfilePage() {
               </h3>
               <div className="space-y-3">
                 <EditField label="Login Email" value={carrier.portalEmail} onSave={value => save('portalEmail', value)} type="email" />
-                <EditField label="Temporary Password" value={carrier.portalPassword} onSave={value => save('portalPassword', value)} />
                 <EditField label="Dispatch Fee %" value={carrier.dispatchFeePercent} onSave={value => save('dispatchFeePercent', Number(value))} type="number" />
               </div>
             </div>

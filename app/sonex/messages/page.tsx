@@ -185,10 +185,8 @@ export default function MessagesPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const refreshAll = useCallback(() => {
-    const cs = getCarriers();
-    const msgs = getAllMessages();
-    setCarriers(cs);
-    setAllMessages(msgs);
+    getCarriers().then(setCarriers);
+    getAllMessages().then(setAllMessages);
   }, []);
 
   useEffect(() => { refreshAll(); }, [refreshAll]);
@@ -196,10 +194,8 @@ export default function MessagesPage() {
   // Update thread when selectedCarrierId changes
   useEffect(() => {
     if (!selectedCarrierId) { setThread([]); return; }
-    const msgs = getMessages(selectedCarrierId);
-    setThread(msgs);
-    markMessagesRead(selectedCarrierId, 'admin');
-    refreshAll();
+    getMessages(selectedCarrierId).then(setThread);
+    markMessagesRead(selectedCarrierId, 'admin').then(() => refreshAll());
   }, [selectedCarrierId, refreshAll]);
 
   // Scroll to bottom
@@ -212,7 +208,7 @@ export default function MessagesPage() {
     .map(carrier => {
       const msgs = allMessages.filter(m => m.carrierId === carrier.id);
       const lastMessage = msgs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-      const unreadCount = getUnreadCountForCarrier(carrier.id, 'admin');
+      const unreadCount = msgs.filter(m => !m.read && m.senderRole === 'carrier').length;
       return { carrier, lastMessage, unreadCount };
     })
     .filter(({ carrier }) =>
@@ -227,19 +223,19 @@ export default function MessagesPage() {
 
   const selectedCarrier = carriers.find(c => c.id === selectedCarrierId);
 
-  const handleSelectCarrier = (carrierId: string) => {
+  const handleSelectCarrier = async (carrierId: string) => {
     setSelectedCarrierId(carrierId);
-    const msgs = getMessages(carrierId);
+    const msgs = await getMessages(carrierId);
     setThread(msgs);
-    markMessagesRead(carrierId, 'admin');
-    setTimeout(() => refreshAll(), 100);
+    await markMessagesRead(carrierId, 'admin');
+    refreshAll();
   };
 
   const handleSend = useCallback(async () => {
     if (!newMessage.trim() || !selectedCarrierId || sending) return;
     setSending(true);
     try {
-      const msg = addMessage({
+      const msg = await addMessage({
         carrierId: selectedCarrierId,
         senderId: 'admin',
         senderName: 'Sonex Dispatch',
@@ -269,10 +265,10 @@ export default function MessagesPage() {
     const file = e.target.files?.[0];
     if (!file || !selectedCarrierId) return;
     const reader = new FileReader();
-    reader.onload = ev => {
+    reader.onload = async ev => {
       const url = ev.target?.result as string;
       const isImage = file.type.startsWith('image/');
-      const msg = addMessage({
+      const msg = await addMessage({
         carrierId: selectedCarrierId,
         senderId: 'admin',
         senderName: 'Sonex Dispatch',
@@ -291,7 +287,7 @@ export default function MessagesPage() {
     e.target.value = '';
   };
 
-  const totalUnread = carriers.reduce((sum, c) => sum + getUnreadCountForCarrier(c.id, 'admin'), 0);
+  const totalUnread = allMessages.filter(m => !m.read && m.senderRole === 'carrier').length;
 
   return (
     <div className="h-screen bg-[#050B18] flex flex-col">

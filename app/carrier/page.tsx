@@ -65,7 +65,7 @@ function toBase64(file: File): Promise<string> {
 interface CheckinConfig {
   event: CheckinEvent;
   label: string;
-  Icon: React.ComponentType<{ size?: number; className?: string }>;
+  Icon: React.ComponentType<any>;
   color: string;
   bg: string;
   border: string;
@@ -150,8 +150,8 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
   const photoRef = useRef<HTMLInputElement>(null);
 
   const refreshCheckins = useCallback(() => {
-    setCheckins(getCheckins(load.id));
-    setPhotoCount(getCargoPhotos(load.id).length);
+    getCheckins(load.id).then(setCheckins);
+    getCargoPhotos(load.id).then(photos => setPhotoCount(photos.length));
   }, [load.id]);
 
   useEffect(() => {
@@ -169,7 +169,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
     if (loading) return;
     setLoading(true);
     try {
-      addCheckin({
+      await addCheckin({
         loadId: load.id,
         event,
         timestamp: new Date().toISOString(),
@@ -184,7 +184,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
         delivered: 'delivered',
       };
       if (statusMap[event]) {
-        updateLoad(load.id, { status: statusMap[event] });
+        await updateLoad(load.id, { status: statusMap[event] });
       }
       toast.success(`✓ ${CHECKIN_EVENT_LABELS[event]} logged!`, {
         style: { background: '#0D1F3C', color: '#FCD34D', border: '1px solid rgba(245,158,11,0.3)' },
@@ -200,7 +200,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
     const file = e.target.files?.[0];
     if (!file) return;
     const url = await toBase64(file);
-    updateLoad(load.id, { bolUrl: url });
+    await updateLoad(load.id, { bolUrl: url });
     setHasBol(true);
     toast.success('BOL uploaded!');
     if (bolRef.current) bolRef.current.value = '';
@@ -210,7 +210,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
     const file = e.target.files?.[0];
     if (!file) return;
     const url = await toBase64(file);
-    updateLoad(load.id, { podUrl: url });
+    await updateLoad(load.id, { podUrl: url });
     setHasPod(true);
     toast.success('POD uploaded!');
     if (podRef.current) podRef.current.value = '';
@@ -222,7 +222,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
     let count = 0;
     for (const file of files) {
       const url = await toBase64(file);
-      addCargoPhoto({
+      await addCargoPhoto({
         loadId: load.id,
         url,
         stage: doneEvents.has('loaded_departing') ? 'delivery' : 'pickup',
@@ -491,15 +491,16 @@ export default function CarrierLoadsPage() {
 
   const refresh = useCallback(() => {
     if (!carrierId) return;
-    const all = getLoadsByCarrier(carrierId);
-    all.sort((a, b) => {
-      const aActive = ACTIVE_STATUSES.includes(a.status);
-      const bActive = ACTIVE_STATUSES.includes(b.status);
-      if (aActive && !bActive) return -1;
-      if (!aActive && bActive) return 1;
-      return new Date(b.pickupDate).getTime() - new Date(a.pickupDate).getTime();
+    getLoadsByCarrier(carrierId).then(all => {
+      all.sort((a, b) => {
+        const aActive = ACTIVE_STATUSES.includes(a.status);
+        const bActive = ACTIVE_STATUSES.includes(b.status);
+        if (aActive && !bActive) return -1;
+        if (!aActive && bActive) return 1;
+        return new Date(b.pickupDate).getTime() - new Date(a.pickupDate).getTime();
+      });
+      setLoads(all);
     });
-    setLoads(all);
   }, [carrierId]);
 
   useEffect(() => { refresh(); }, [refresh]);

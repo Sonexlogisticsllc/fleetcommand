@@ -1,12 +1,12 @@
 'use client';
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import type { SonexUser, SonexRole } from './sonexTypes';
-import { getCarriers } from './sonexStore';
+import { supabase } from './supabaseClient';
 
 interface SonexAuthContextType {
   user: SonexUser | null;
-  login: (email: string, password: string) => { success: boolean; user?: SonexUser; error?: string };
-  logout: () => void;
+  login: (email: string, password: string) => Promise<{ success: boolean; user?: SonexUser; error?: string }>;
+  logout: () => Promise<void>;
   isAuthenticated: boolean;
   isAdmin: boolean;
   isCarrier: boolean;
@@ -14,78 +14,94 @@ interface SonexAuthContextType {
 
 const SonexAuthContext = createContext<SonexAuthContextType>({
   user: null,
-  login: () => ({ success: false }),
-  logout: () => {},
+  login: async () => ({ success: false }),
+  logout: async () => {},
   isAuthenticated: false,
   isAdmin: false,
   isCarrier: false,
 });
 
-const SESSION_KEY = 'sonex_auth_user_v1';
-
-// Admin credentials (hardcoded for mock phase; will be Supabase Auth in Phase 2)
-const ADMIN_CREDENTIALS = {
-  email: 'dispatch@sonexlogistics.com',
-  password: 'sonex2026',
-  user: {
-    id: 'admin-1',
-    email: 'dispatch@sonexlogistics.com',
-    role: 'admin' as SonexRole,
-    displayName: 'Sonex Dispatch',
-    avatar: 'SD',
-  },
-};
-
 export function SonexAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SonexUser | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchProfile = async (uid: string) => {
     try {
-      const stored = localStorage.getItem(SESSION_KEY);
-      if (stored) setUser(JSON.parse(stored));
-    } catch { /* ignore */ }
-  }, []);
-
-  const login = (email: string, password: string): { success: boolean; user?: SonexUser; error?: string } => {
-    // Check admin
-    if (
-      email.trim().toLowerCase() === ADMIN_CREDENTIALS.email &&
-      password === ADMIN_CREDENTIALS.password
-    ) {
-      const u = ADMIN_CREDENTIALS.user;
-      setUser(u);
-      localStorage.setItem(SESSION_KEY, JSON.stringify(u));
-      return { success: true, user: u };
-    }
-
-    // Check carrier portal credentials
-    try {
-      const carriers = getCarriers();
-      const carrier = carriers.find(
-        c => c.portalEmail.toLowerCase() === email.trim().toLowerCase() &&
-             c.portalPassword === password
-      );
-      if (carrier) {
-        const u: SonexUser = {
-          id: carrier.id,
-          email: carrier.portalEmail,
-          role: 'carrier',
-          displayName: `${carrier.firstName} ${carrier.lastName}`,
-          carrierId: carrier.id,
-          avatar: `${carrier.firstName[0]}${carrier.lastName[0]}`.toUpperCase(),
-        };
-        setUser(u);
-        localStorage.setItem(SESSION_KEY, JSON.stringify(u));
-        return { success: true, user: u };
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', uid)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching profile:', error);
+        return null;
       }
-    } catch { /* ignore */ }
-
-    return { success: false, error: 'Invalid email or password.' };
+      
+      if (data) {
+        const mappedUser: SonexUser = {
+          id: data.id,
+          email: data.email,
+          role: data.role as SonexRole,
+          displayName: data.display_name,
+          carrierId: data.carrier_id || undefined,
+          avatar: data.avatar || 'NU',
+        };
+        setUser(mappedUser);
+        return mappedUser;
+      }
+    } catch (err) {
+      console.error('Error fetching user profile:', err);
+    }
+    return null;
   };
 
-  const logout = () => {
+  useEffect(() => {
+    // 1. Get current session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        fetchProfile(session.user.id).finally(() => setLoading(false));
+      } else {
+        setLoading(false);
+      }
+    });
+
+    // 2. Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        await fetchProfile(session.user.id);
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const login = async (email: string, password: string): Promise<{ success: boolean; user?: SonexUser; error?: string }> => {
+    const { data: { user: authUser }, error: authError } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password,
+    });
+
+    if (authError || !authUser) {
+      return { success: false, error: authError?.message || 'Invalid email or password.' };
+    }
+
+    const mapped = await fetchProfile(authUser.id);
+    if (!mapped) {
+      return { success: false, error: 'User profile not found in database.' };
+    }
+
+    return { success: true, user: mapped };
+  };
+
+  const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
-    try { localStorage.removeItem(SESSION_KEY); } catch { /* ignore */ }
   };
 
   return (
@@ -97,7 +113,7 @@ export function SonexAuthProvider({ children }: { children: ReactNode }) {
       isAdmin: user?.role === 'admin',
       isCarrier: user?.role === 'carrier',
     }}>
-      {children}
+      {!loading && children}
     </SonexAuthContext.Provider>
   );
 }

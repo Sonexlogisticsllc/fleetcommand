@@ -108,16 +108,18 @@ export default function CarrierProfilePage() {
   const [zip, setZip] = useState('');
 
   const load = useCallback(() => {
-    const c = getCarrier(carrierId);
-    setCarrier(c);
-    if (c) {
-      setPhone(c.phone);
-      setEmail(c.email);
-      setAddress(c.address ?? '');
-      setCity(c.city ?? '');
-      setState(c.state ?? '');
-      setZip(c.zip ?? '');
-    }
+    if (!carrierId) return;
+    getCarrier(carrierId).then(c => {
+      setCarrier(c);
+      if (c) {
+        setPhone(c.phone);
+        setEmail(c.email);
+        setAddress(c.address ?? '');
+        setCity(c.city ?? '');
+        setState(c.state ?? '');
+        setZip(c.zip ?? '');
+      }
+    });
   }, [carrierId]);
 
   useEffect(() => { load(); }, [load]);
@@ -126,7 +128,7 @@ export default function CarrierProfilePage() {
     if (!carrierId || saving) return;
     setSaving(true);
     try {
-      updateCarrier(carrierId, { phone, email, address, city, state, zip });
+      await updateCarrier(carrierId, { phone, email, address, city, state, zip });
       toast.success('Profile updated!', {
         style: { background: '#0D1F3C', color: '#FCD34D', border: '1px solid rgba(245,158,11,0.3)' },
       });

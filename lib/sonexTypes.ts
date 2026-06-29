@@ -82,7 +82,6 @@ export interface SonexCarrier {
   notes: string;
   // Portal login
   portalEmail: string;
-  portalPassword: string; // plaintext for mock; will be hashed in Supabase phase
   // Meta
   joinedAt: string;   // ISO 8601
   updatedAt: string;

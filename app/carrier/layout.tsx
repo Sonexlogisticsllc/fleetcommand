@@ -42,9 +42,8 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
       return;
     }
     if (user?.carrierId) {
-      const c = getCarrier(user.carrierId);
-      setCarrier(c);
-      setUnreadCount(getUnreadCountForCarrier(user.carrierId, 'carrier'));
+      getCarrier(user.carrierId).then(setCarrier);
+      getUnreadCountForCarrier(user.carrierId, 'carrier').then(setUnreadCount);
     }
   }, [isAuthenticated, isCarrier, user, router]);
 

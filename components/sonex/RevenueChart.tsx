@@ -39,7 +39,7 @@ export default function RevenueChart({ data }: RevenueChartProps) {
             fontSize: '11px',
             color: '#F5F5F7',
           }}
-          formatter={(v: number, name: string) => [fmt$(v), name === 'gross' ? 'Gross' : 'Fees']}
+          formatter={(v: any, name: any) => [fmt$(Number(v)), name === 'gross' ? 'Gross' : 'Fees']}
           cursor={{ fill: 'rgba(255,255,255,0.03)' }}
         />
         <Bar dataKey="gross" fill="#FF6B35" radius={[4, 4, 0, 0]} maxBarSize={32} />

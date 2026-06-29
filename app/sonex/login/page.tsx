@@ -25,7 +25,7 @@ export default function SonexLoginPage() {
     setError('');
     setLoading(true);
 
-    const result = login(email, password);
+    const result = await login(email, password);
     setLoading(false);
 
     if (!result.success || !result.user) {

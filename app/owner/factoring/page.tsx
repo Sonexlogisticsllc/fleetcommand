@@ -42,7 +42,11 @@ export default function FactoringPage() {
       ...res,
       advanceAmount: Math.round(load.rate * (res.advanceRate / 100)),
     });
-    setCompletedIds(prev => new Set([...prev, load.id]));
+    setCompletedIds(prev => {
+      const next = new Set(prev);
+      next.add(load.id);
+      return next;
+    });
   };
 
   const handleClose = () => {

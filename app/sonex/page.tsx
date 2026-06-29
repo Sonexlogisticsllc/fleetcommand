@@ -99,14 +99,17 @@ export default function SonexDashboardPage() {
   const [invoiceReady, setInvoiceReady] = useState(0);
 
   useEffect(() => {
-    const loads = getLoads();
-    setStats(getDashboardStats());
-    setActivity(getTodayActivity());
-    setCarriers(getCarriers());
-    setWeeklyData(buildWeeklyData(loads));
-    setPodNeeded(loads.filter(load => load.status === 'delivered' && !load.podUrl).length);
-    setInvoiceReady(loads.filter(load => ['pod_received', 'invoiced', 'paid'].includes(load.status)).length);
-    setUnreadCount(getAllMessages().filter(message => !message.read && message.senderRole === 'carrier').length);
+    getLoads().then(loads => {
+      setWeeklyData(buildWeeklyData(loads));
+      setPodNeeded(loads.filter(load => load.status === 'delivered' && !load.podUrl).length);
+      setInvoiceReady(loads.filter(load => ['pod_received', 'invoiced', 'paid'].includes(load.status)).length);
+    });
+    getDashboardStats().then(setStats);
+    getTodayActivity().then(setActivity);
+    getCarriers().then(setCarriers);
+    getAllMessages().then(msgs => {
+      setUnreadCount(msgs.filter(message => !message.read && message.senderRole === 'carrier').length);
+    });
   }, []);
 
   const carrierMap = useMemo(

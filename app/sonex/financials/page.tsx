@@ -14,6 +14,7 @@ import autoTable from 'jspdf-autotable';
 import type { SonexCarrier, SonexLoad, LoadStatus } from '@/lib/sonexTypes';
 import { LOAD_STATUS_LABELS, EQUIPMENT_TYPE_LABELS } from '@/lib/sonexTypes';
 import { getCarriers, getLoads, getSettings, exportLoadsCSV, addSettlement } from '@/lib/sonexStore';
+import { DEFAULT_SETTINGS } from '@/lib/sonexData';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -149,6 +150,7 @@ const AmberTooltip = ({ active, payload, label }: any) => {
 export default function FinancialsPage() {
   const [carriers, setCarriers] = useState<SonexCarrier[]>([]);
   const [loads, setLoads] = useState<SonexLoad[]>([]);
+  const [settings, setSettings] = useState<any>(null);
   const [carrierFilter, setCarrierFilter] = useState('all');
   const [dateRange, setDateRange] = useState('this_month');
   const [customFrom, setCustomFrom] = useState('');
@@ -170,8 +172,9 @@ export default function FinancialsPage() {
   const [carrierSort, setCarrierSort] = useState<{ col: string; dir: 'asc' | 'desc' }>({ col: 'gross', dir: 'desc' });
 
   useEffect(() => {
-    setCarriers(getCarriers());
-    setLoads(getLoads());
+    getCarriers().then(setCarriers);
+    getLoads().then(setLoads);
+    getSettings().then(setSettings);
   }, []);
 
   const carrierMap = useMemo(() => new Map(carriers.map(c => [c.id, c])), [carriers]);
@@ -260,7 +263,7 @@ export default function FinancialsPage() {
   };
 
   // Settlement PDF
-  const handleGenerateSettlement = () => {
+  const handleGenerateSettlement = async () => {
     const carrier = carriers.find(c => c.id === settlementCarrier);
     if (!carrier || !settlementFrom || !settlementTo) {
       toast.error('Select carrier and date range');
@@ -273,7 +276,7 @@ export default function FinancialsPage() {
     );
     if (settlementLoads.length === 0) { toast.error('No loads in this period'); return; }
 
-    const settings = getSettings();
+    const activeSettings = settings || DEFAULT_SETTINGS;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
     const pg = doc.internal.pageSize;
 
@@ -283,12 +286,12 @@ export default function FinancialsPage() {
     doc.setTextColor(245, 158, 11);
     doc.setFontSize(20);
     doc.setFont('helvetica', 'bold');
-    doc.text(settings.companyName || 'Sonex Logistics LLC', 40, 38);
+    doc.text(activeSettings.companyName || 'Sonex Logistics LLC', 40, 38);
     doc.setFontSize(9);
     doc.setTextColor(148, 163, 184);
     doc.setFont('helvetica', 'normal');
-    doc.text(`${settings.companyAddress} · ${settings.companyCity}, ${settings.companyState} ${settings.companyZip}`, 40, 54);
-    doc.text(`${settings.companyEmail} · ${settings.companyPhone}`, 40, 67);
+    doc.text(`${activeSettings.companyAddress} · ${activeSettings.companyCity}, ${activeSettings.companyState} ${activeSettings.companyZip}`, 40, 54);
+    doc.text(`${activeSettings.companyEmail} · ${activeSettings.companyPhone}`, 40, 67);
     doc.setTextColor(252, 211, 77);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
@@ -329,9 +332,11 @@ export default function FinancialsPage() {
       columnStyles: {
         3: { halign: 'right' }, 4: { halign: 'center' }, 5: { halign: 'right' }, 6: { halign: 'right' }
       },
-      didDrawRow: (data) => {
+      didParseCell: (data: any) => {
         if (data.row.index === settlementLoads.length) {
-          data.row.cells[0].styles = { fontStyle: 'bold', fillColor: [245, 158, 11], textColor: [0, 0, 0] };
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [245, 158, 11];
+          data.cell.styles.textColor = [0, 0, 0];
         }
       },
     });
@@ -347,7 +352,7 @@ export default function FinancialsPage() {
     doc.line(320, finalY + 25, 520, finalY + 25);
 
     // Save settlement record
-    addSettlement({
+    await addSettlement({
       carrierId: settlementCarrier,
       periodStart: settlementFrom,
       periodEnd: settlementTo,
@@ -378,7 +383,7 @@ export default function FinancialsPage() {
     const weekLoads = getInvoiceLoadsForWeek(invoiceWeek);
     if (weekLoads.length === 0) { toast.error('No completed loads this week'); return; }
 
-    const settings = getSettings();
+    const activeSettings = settings || DEFAULT_SETTINGS;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
     const pg = doc.internal.pageSize;
 
@@ -392,7 +397,7 @@ export default function FinancialsPage() {
     doc.setFontSize(9);
     doc.setTextColor(148, 163, 184);
     doc.setFont('helvetica', 'normal');
-    doc.text(`${settings.companyAddress} · ${settings.companyCity}, ${settings.companyState} ${settings.companyZip} · ${settings.companyEmail} · ${settings.companyPhone}`, 40, 52);
+    doc.text(`${activeSettings.companyAddress} · ${activeSettings.companyCity}, ${activeSettings.companyState} ${activeSettings.companyZip} · ${activeSettings.companyEmail} · ${activeSettings.companyPhone}`, 40, 52);
     doc.setTextColor(252, 211, 77);
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');

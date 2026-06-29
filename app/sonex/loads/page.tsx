@@ -62,12 +62,12 @@ function NewLoadModal({ carriers, onClose, onSaved }: NewLoadModalProps) {
 
   const set = (k: string, v: unknown) => setForm(f => ({ ...f, [k]: v }));
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.carrierId || !form.pickupDate || !form.deliveryDate || !form.rate) {
       toast.error('Please fill in required fields: carrier, dates, and rate.');
       return;
     }
-    addLoad({
+    await addLoad({
       ...form,
       dispatchFeePercent: feePercent,
       ratConUrl: undefined,
@@ -244,8 +244,8 @@ export default function LoadsPage() {
   const [showNew, setShowNew] = useState(false);
 
   const load = () => {
-    setLoads(getLoads());
-    setCarriers(getCarriers());
+    getLoads().then(setLoads);
+    getCarriers().then(setCarriers);
   };
 
   useEffect(() => { load(); }, []);

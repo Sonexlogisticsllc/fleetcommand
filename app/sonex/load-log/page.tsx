@@ -95,8 +95,8 @@ export default function LoadLogPage() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   useEffect(() => {
-    setCarriers(getCarriers());
-    setLoads(getLoads());
+    getCarriers().then(setCarriers);
+    getLoads().then(setLoads);
   }, []);
 
   const carrierMap = useMemo(() => new Map(carriers.map(c => [c.id, c])), [carriers]);

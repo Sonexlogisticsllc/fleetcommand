@@ -97,7 +97,7 @@ export default function FuelPricesPage() {
                     dot={{ fill: '#F59E0B', r: 3, strokeWidth: 0 }} />
                   <Tooltip
                     contentStyle={{ background: '#0D0820', border: '1px solid rgba(245,158,11,0.2)', borderRadius: '8px', fontSize: '11px' }}
-                    formatter={(v: number) => [`$${v.toFixed(3)}/gal`, 'Price']}
+                    formatter={(v: any) => [`$${Number(v).toFixed(3)}/gal`, 'Price']}
                   />
                 </AreaChart>
               </ResponsiveContainer>

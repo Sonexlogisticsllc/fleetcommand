@@ -206,12 +206,16 @@ export default function CarrierEarningsPage() {
 
   useEffect(() => {
     if (!carrierId) return;
-    const loads = getLoadsByCarrier(carrierId).filter(l => COMPLETED.includes(l.status));
-    loads.sort((a, b) => new Date(b.pickupDate).getTime() - new Date(a.pickupDate).getTime());
-    setAllCompleted(loads);
-    setSettlements(getSettlements(carrierId).sort(
-      (a, b) => new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime()
-    ));
+    getLoadsByCarrier(carrierId).then(allLoads => {
+      const loads = allLoads.filter(l => COMPLETED.includes(l.status));
+      loads.sort((a, b) => new Date(b.pickupDate).getTime() - new Date(a.pickupDate).getTime());
+      setAllCompleted(loads);
+    });
+    getSettlements(carrierId).then(allSettlements => {
+      setSettlements(allSettlements.sort(
+        (a, b) => new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime()
+      ));
+    });
   }, [carrierId]);
 
   // Lifetime totals

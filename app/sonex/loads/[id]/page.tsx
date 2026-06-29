@@ -65,23 +65,29 @@ export default function LoadDetailPage() {
   const [load, setLoad] = useState<SonexLoad | null>(null);
   const [carriers, setCarriers] = useState<SonexCarrier[]>([]);
   const [checkins, setCheckins] = useState<SonexLoadCheckin[]>([]);
+  const [carrier, setCarrier] = useState<SonexCarrier | null>(null);
 
-  const reload = () => {
-    const found = getLoad(loadId);
+  const reload = async () => {
+    const found = await getLoad(loadId);
     if (!found) {
       router.push('/sonex/loads');
       return;
     }
     setLoad(found);
-    setCarriers(getCarriers());
-    setCheckins(getCheckins(loadId));
+    
+    const c = await getCarrier(found.carrierId);
+    setCarrier(c || null);
+
+    const carriersData = await getCarriers();
+    setCarriers(carriersData);
+
+    const checkinsData = await getCheckins(loadId);
+    setCheckins(checkinsData);
   };
 
   useEffect(() => {
     reload();
   }, [loadId]);
-
-  const carrier = useMemo(() => load ? getCarrier(load.carrierId) : undefined, [load]);
   const loggedEvents = useMemo(() => new Set(checkins.map(c => c.event)), [checkins]);
   const financialPreview = useMemo(() => {
     if (!load) return { dispatchFeeAmount: 0, carrierNet: 0, ratePerMile: 0 };
@@ -96,10 +102,14 @@ export default function LoadDetailPage() {
     );
   }
 
-  const patch = (data: Partial<SonexLoad>, message = 'Load updated') => {
-    const updated = updateLoad(load.id, data);
+  const patch = async (data: Partial<SonexLoad>, message = 'Load updated') => {
+    const updated = await updateLoad(load.id, data);
     if (!updated) return;
     setLoad(updated);
+    if (data.carrierId) {
+      const c = await getCarrier(data.carrierId);
+      setCarrier(c || null);
+    }
     toast.success(message);
   };
 
@@ -133,8 +143,8 @@ export default function LoadDetailPage() {
     reader.readAsDataURL(file);
   };
 
-  const handleCheckin = (event: CheckinEvent) => {
-    addCheckin({
+  const handleCheckin = async (event: CheckinEvent) => {
+    await addCheckin({
       loadId: load.id,
       event,
       timestamp: new Date().toISOString(),
@@ -142,9 +152,9 @@ export default function LoadDetailPage() {
       loggedBy: 'admin',
     });
     if (event === 'delivered' && LOAD_STATUS_ORDER.indexOf(load.status) < LOAD_STATUS_ORDER.indexOf('delivered')) {
-      updateLoad(load.id, { status: 'delivered' });
+      await updateLoad(load.id, { status: 'delivered' });
     }
-    reload();
+    await reload();
     toast.success(CHECKIN_EVENT_LABELS[event]);
   };
 

@@ -11,7 +11,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<SonexSettings | null>(null);
 
   useEffect(() => {
-    setSettings(getSettings());
+    getSettings().then(setSettings);
   }, []);
 
   if (!settings) {
@@ -26,14 +26,14 @@ export default function SettingsPage() {
     setSettings(prev => prev ? { ...prev, [key]: value } : prev);
   };
 
-  const handleSave = () => {
-    const saved = updateSettings(settings);
+  const handleSave = async () => {
+    const saved = await updateSettings(settings);
     setSettings(saved);
     toast.success('Settings saved');
   };
 
-  const handleReset = () => {
-    const saved = updateSettings(DEFAULT_SETTINGS);
+  const handleReset = async () => {
+    const saved = await updateSettings(DEFAULT_SETTINGS);
     setSettings(saved);
     toast.success('Defaults restored');
   };

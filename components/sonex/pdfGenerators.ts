@@ -222,10 +222,10 @@ export async function generateWeeklyInvoicePDF(
   const tableRows: string[][] = [];
   let runningSubtotals: { carrier: string; loads: number; fee: number }[] = [];
 
-  for (const [carrierId, carrierLoads] of carrierGroups) {
+  Array.from(carrierGroups.entries()).forEach(([carrierId, carrierLoads]) => {
     const carrierName = carrierLoads[0].carrierName;
-    const subtotalFee = carrierLoads.reduce((s, l) => s + l.dispatchFeeAmount, 0);
-    const subtotalGross = carrierLoads.reduce((s, l) => s + l.rate, 0);
+    const subtotalFee = carrierLoads.reduce((s: number, l: WeeklyInvoiceLoad) => s + l.dispatchFeeAmount, 0);
+    const subtotalGross = carrierLoads.reduce((s: number, l: WeeklyInvoiceLoad) => s + l.rate, 0);
 
     for (const load of carrierLoads) {
       tableRows.push([
@@ -243,10 +243,10 @@ export async function generateWeeklyInvoicePDF(
     // Carrier subtotal row
     tableRows.push(['', `  Subtotal — ${carrierName}`, '', '', `${carrierLoads.length} loads`, formatCurrency(subtotalGross), '', formatCurrency(subtotalFee)]);
     runningSubtotals.push({ carrier: carrierName, loads: carrierLoads.length, fee: subtotalFee });
-  }
+  });
 
-  const grandTotalFee = loads.reduce((s, l) => s + l.dispatchFeeAmount, 0);
-  const grandTotalGross = loads.reduce((s, l) => s + l.rate, 0);
+  const grandTotalFee = loads.reduce((s: number, l: WeeklyInvoiceLoad) => s + l.dispatchFeeAmount, 0);
+  const grandTotalGross = loads.reduce((s: number, l: WeeklyInvoiceLoad) => s + l.rate, 0);
 
   autoTable(doc, {
     startY: y + 5,

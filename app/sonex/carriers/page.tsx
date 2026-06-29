@@ -32,7 +32,6 @@ const INSURANCE_OPTS = Object.entries(INSURANCE_TYPE_LABELS) as [InsuranceType, 
 const STATUS_OPTS: CarrierStatus[] = ['active', 'onboarding', 'inactive'];
 
 function AddCarrierModal({ onClose, onSaved }: AddCarrierModalProps) {
-  const defaultDispatchFeePercent = getSettings().defaultDispatchFeePercent;
   const [form, setForm] = useState({
     // Contact
     firstName: '', lastName: '', email: '', phone: '',
@@ -51,19 +50,25 @@ function AddCarrierModal({ onClose, onSaved }: AddCarrierModalProps) {
     insuranceType: 'certificate_holder' as InsuranceType,
     insuranceCompany: '', insurancePolicyNumber: '',
     // Business
-    dispatchFeePercent: defaultDispatchFeePercent, status: 'active' as CarrierStatus, notes: '',
+    dispatchFeePercent: 10, status: 'active' as CarrierStatus, notes: '',
     // Portal
-    portalEmail: '', portalPassword: '',
+    portalEmail: '',
   });
+
+  useEffect(() => {
+    getSettings().then(s => {
+      setForm(f => ({ ...f, dispatchFeePercent: s.defaultDispatchFeePercent }));
+    });
+  }, []);
 
   const set = (k: string, v: unknown) => setForm(f => ({ ...f, [k]: v }));
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.firstName || !form.lastName || !form.portalEmail) {
       toast.error('First name, last name, and portal email are required.');
       return;
     }
-    addCarrier({ ...form });
+    await addCarrier({ ...form });
     toast.success(`Carrier ${form.firstName} ${form.lastName} added!`);
     onSaved();
     onClose();
@@ -210,7 +215,6 @@ function AddCarrierModal({ onClose, onSaved }: AddCarrierModalProps) {
 
           <Section title="Create Carrier Login" icon={KeyRound}>
             <div className="col-span-2">{input('Login Email', 'portalEmail', 'email', 'carrier@example.com')}</div>
-            <div className="col-span-2">{input('Temporary Password', 'portalPassword', 'text', 'temp-password-123')}</div>
           </Section>
         </div>
 
@@ -238,7 +242,7 @@ export default function CarriersPage() {
   const [showAdd, setShowAdd] = useState(false);
 
   const load = () => {
-    setCarriers(getCarriers());
+    getCarriers().then(setCarriers);
   };
 
   useEffect(() => { load(); }, []);

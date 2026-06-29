@@ -61,10 +61,7 @@ export default function SonexLayout({ children }: { children: React.ReactNode })
   // Load badge counts
   useEffect(() => {
     if (!isAuthenticated || !isAdmin) return;
-    try {
-      const carriers = getCarriers();
-      const loads = getLoads();
-      const allMessages = getAllMessages();
+    Promise.all([getCarriers(), getLoads(), getAllMessages()]).then(([carriers, loads, allMessages]) => {
       const unreadMsgs = allMessages.filter(
         m => !m.read && m.senderRole === 'carrier'
       ).length;
@@ -74,7 +71,7 @@ export default function SonexLayout({ children }: { children: React.ReactNode })
         active_loads: loads.filter(l => ['booked', 'dispatched', 'in_transit'].includes(l.status)).length,
         unread_msgs: unreadMsgs,
       });
-    } catch { /* ignore */ }
+    }).catch(() => { /* ignore */ });
   }, [isAuthenticated, isAdmin, pathname]);
 
   const getBadge = (key?: string): number => {

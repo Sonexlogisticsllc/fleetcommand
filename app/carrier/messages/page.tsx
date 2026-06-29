@@ -127,14 +127,13 @@ export default function CarrierMessagesPage() {
 
   const refresh = useCallback(() => {
     if (!carrierId) return;
-    setMessages(getMessages(carrierId));
+    getMessages(carrierId).then(setMessages);
   }, [carrierId]);
 
   // On mount: mark admin messages as read + load
   useEffect(() => {
     if (!carrierId) return;
-    markMessagesRead(carrierId, 'carrier');
-    refresh();
+    markMessagesRead(carrierId, 'carrier').then(() => refresh());
   }, [carrierId, refresh]);
 
   // Auto-scroll to bottom whenever messages change
@@ -149,7 +148,7 @@ export default function CarrierMessagesPage() {
     if (!trimmed || sending) return;
     setSending(true);
     try {
-      addMessage({
+      await addMessage({
         carrierId,
         senderId: carrierId,
         senderName: carrierName,
@@ -177,7 +176,7 @@ export default function CarrierMessagesPage() {
     setSending(true);
     try {
       const url = await toBase64(file);
-      addMessage({
+      await addMessage({
         carrierId,
         senderId: carrierId,
         senderName: carrierName,
