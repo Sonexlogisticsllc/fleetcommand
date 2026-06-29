@@ -35,14 +35,14 @@ INSERT INTO public.loads (
     commodity, weight, miles, rate, dispatch_fee_percent, dispatch_fee_amount, carrier_net, rate_per_mile,
     status, notes
 ) VALUES (
-    'l0000000-0000-0000-0000-000000000001', 'SNX-2026-001', 'c0000000-0000-0000-0000-000000000001',
+    '10000000-0000-0000-0000-000000000001', 'SNX-2026-001', 'c0000000-0000-0000-0000-000000000001',
     'C.H. Robinson', 'Mark Davis', '(800) 323-7587', 'mark.davis@chrobinson.com', 'MC-1234',
     'PepsiCo Warehouse', '1200 Beverage Dr', 'Dallas', 'TX', '75201', '2026-06-29', '08:00', 'APPT-1002',
     'Walmart DC 6012', '500 Distribution Rd', 'Houston', 'TX', '77001', '2026-06-29', '14:00', 'APPT-5542',
     'Beverages (Soda)', 42000, 240, 950.00, 8.00, 76.00, 874.00, 3.96,
     'booked', 'Must maintain proper check-in times.'
 ), (
-    'l0000000-0000-0000-0000-000000000002', 'SNX-2026-002', 'c0000000-0000-0000-0000-000000000002',
+    '10000000-0000-0000-0000-000000000002', 'SNX-2026-002', 'c0000000-0000-0000-0000-000000000002',
     'TQL', 'Jessica Miller', '(800) 580-3101', 'jmiller@tql.com', 'MC-5678',
     'Tyson Foods', '400 Poultry Way', 'Springdale', 'AR', '72764', '2026-06-29', '06:00', 'PU-99182',
     'Kroger Distribution', '101 Grocery Ln', 'Cincinnati', 'OH', '45201', '2026-06-30', '10:00', 'DEL-33821',
@@ -55,9 +55,9 @@ INSERT INTO public.loads (
 INSERT INTO public.load_checkins (
     load_id, event, timestamp, notes, logged_by
 ) VALUES (
-    'l0000000-0000-0000-0000-000000000002', 'arrived_pickup', '2026-06-29 05:45:00+00', 'Driver arrived at Tyson Foods pickup facility early.', 'carrier'
+    '10000000-0000-0000-0000-000000000002', 'arrived_pickup', '2026-06-29 05:45:00+00', 'Driver arrived at Tyson Foods pickup facility early.', 'carrier'
 ), (
-    'l0000000-0000-0000-0000-000000000002', 'loaded_departing', '2026-06-29 07:15:00+00', 'Loaded, trailer sealed #481992. Departing Tyson.', 'carrier'
+    '10000000-0000-0000-0000-000000000002', 'loaded_departing', '2026-06-29 07:15:00+00', 'Loaded, trailer sealed #481992. Departing Tyson.', 'carrier'
 );
 
 
