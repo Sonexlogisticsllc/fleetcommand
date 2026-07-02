@@ -4,16 +4,15 @@ import React, { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
-  Truck, DollarSign, MessageSquare, User, Bell, ChevronRight,
+  Truck, DollarSign, User, Bell, ChevronRight,
 } from 'lucide-react';
 import { useSonexAuth } from '@/lib/sonexAuth';
-import { getCarrier, getUnreadCountForCarrier } from '@/lib/sonexStore';
+import { getCarrier } from '@/lib/sonexStore';
 import type { SonexCarrier } from '@/lib/sonexTypes';
 
 const NAV_ITEMS = [
   { label: 'Loads',    href: '/carrier',           Icon: Truck },
   { label: 'Earnings', href: '/carrier/earnings',   Icon: DollarSign },
-  { label: 'Messages', href: '/carrier/messages',   Icon: MessageSquare },
   { label: 'Profile',  href: '/carrier/profile',    Icon: User },
 ];
 
@@ -34,8 +33,6 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
   const router = useRouter();
   const pathname = usePathname();
   const [carrier, setCarrier] = useState<SonexCarrier | undefined>(undefined);
-  const [unreadCount, setUnreadCount] = useState(0);
-
   useEffect(() => {
     if (!isAuthenticated || !isCarrier) {
       router.replace('/sonex/login');
@@ -43,7 +40,6 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
     }
     if (user?.carrierId) {
       getCarrier(user.carrierId).then(setCarrier);
-      getUnreadCountForCarrier(user.carrierId, 'carrier').then(setUnreadCount);
     }
   }, [isAuthenticated, isCarrier, user, router]);
 
@@ -82,9 +78,6 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
           <span className="text-sm text-slate-300 font-medium truncate max-w-[140px]">{carrierName}</span>
           <button className="relative w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/5 transition-colors">
             <Bell size={18} className="text-slate-400" />
-            {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-500" />
-            )}
           </button>
         </div>
       </header>
@@ -120,7 +113,6 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {NAV_ITEMS.map(({ label, href, Icon }) => {
             const active = isActive(href);
-            const isMsg = href === '/carrier/messages';
             return (
               <Link key={href} href={href}
                 className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-all group relative ${
@@ -133,11 +125,6 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
                 )}
                 <Icon size={18} className={active ? 'text-amber-400' : 'text-slate-500 group-hover:text-slate-300'} />
                 <span>{label}</span>
-                {isMsg && unreadCount > 0 && (
-                  <span className="ml-auto text-[10px] font-bold bg-amber-500 text-black rounded-full w-5 h-5 flex items-center justify-center">
-                    {unreadCount}
-                  </span>
-                )}
                 {!active && <ChevronRight size={14} className="ml-auto opacity-0 group-hover:opacity-40 transition-opacity" />}
               </Link>
             );
@@ -160,7 +147,6 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
         style={{ background: '#0F0F0F', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
         {NAV_ITEMS.map(({ label, href, Icon }) => {
           const active = isActive(href);
-          const isMsg = href === '/carrier/messages';
           return (
             <Link key={href} href={href}
               className={`flex-1 flex flex-col items-center justify-center gap-0.5 relative transition-colors ${
@@ -172,11 +158,6 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
               )}
               <div className="relative">
                 <Icon size={21} strokeWidth={active ? 2.2 : 1.8} />
-                {isMsg && unreadCount > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 text-[9px] font-bold bg-amber-500 text-black rounded-full w-4 h-4 flex items-center justify-center leading-none">
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </span>
-                )}
               </div>
               <span className={`text-[10px] font-medium leading-none ${active ? 'text-amber-400' : 'text-slate-500'}`}>
                 {label}

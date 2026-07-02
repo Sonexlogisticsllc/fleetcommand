@@ -76,7 +76,7 @@ export default function LoadDetailPage() {
     }
     setLoad(found);
     
-    const c = await getCarrier(found.carrierId);
+    const c = found.carrierId ? await getCarrier(found.carrierId) : null;
     setCarrier(c || null);
 
     const carriersData = await getCarriers();
@@ -107,8 +107,8 @@ export default function LoadDetailPage() {
     const updated = await updateLoad(load.id, data);
     if (!updated) return;
     setLoad(updated);
-    if (data.carrierId) {
-      const c = await getCarrier(data.carrierId);
+    if (data.carrierId !== undefined) {
+      const c = data.carrierId ? await getCarrier(data.carrierId) : null;
       setCarrier(c || null);
     }
     toast.success(message);
@@ -313,16 +313,17 @@ export default function LoadDetailPage() {
               </h2>
               <div className="space-y-4">
                 <select
-                  value={load.carrierId}
+                  value={load.carrierId || ''}
                   onChange={e => {
                     const nextCarrier = carriers.find(c => c.id === e.target.value);
-                    set('carrierId', e.target.value);
+                    set('carrierId', e.target.value || '');
                     if (nextCarrier) set('dispatchFeePercent', nextCarrier.dispatchFeePercent);
                   }}
                   className="input-primary py-2.5 text-sm"
                 >
+                  <option value="" className="bg-[#050B18]">-- Unassigned --</option>
                   {carriers.map(c => (
-                    <option key={c.id} value={c.id}>
+                    <option key={c.id} value={c.id} className="bg-[#050B18]">
                       {c.firstName} {c.lastName} - {EQUIPMENT_TYPE_LABELS[c.equipmentType]}
                     </option>
                   ))}

@@ -29,12 +29,11 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Carriers',   href: '/sonex/carriers',   icon: Users,            badge: 'carriers' },
   { label: 'Loads',      href: '/sonex/loads',      icon: Package,          badge: 'active_loads' },
   { label: 'Load Log',   href: '/sonex/load-log',   icon: TableProperties },
-  { label: 'Messages',   href: '/sonex/messages',   icon: MessageSquare,    badge: 'unread_msgs' },
   { label: 'Financials', href: '/sonex/financials', icon: BarChart3 },
   { label: 'Settings',   href: '/sonex/settings',   icon: Settings },
 ] ;
 
-type BadgeKey = 'carriers' | 'active_loads' | 'unread_msgs';
+type BadgeKey = 'carriers' | 'active_loads';
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -47,7 +46,6 @@ export default function SonexLayout({ children }: { children: React.ReactNode })
   const [badges, setBadges] = useState<Record<BadgeKey, number>>({
     carriers: 0,
     active_loads: 0,
-    unread_msgs: 0,
   });
 
   // Auth guard — skip for the login page itself
@@ -61,15 +59,10 @@ export default function SonexLayout({ children }: { children: React.ReactNode })
   // Load badge counts
   useEffect(() => {
     if (!isAuthenticated || !isAdmin) return;
-    Promise.all([getCarriers(), getLoads(), getAllMessages()]).then(([carriers, loads, allMessages]) => {
-      const unreadMsgs = allMessages.filter(
-        m => !m.read && m.senderRole === 'carrier'
-      ).length;
-
+    Promise.all([getCarriers(), getLoads()]).then(([carriers, loads]) => {
       setBadges({
         carriers: carriers.filter(c => c.status === 'active').length,
         active_loads: loads.filter(l => ['booked', 'dispatched', 'in_transit'].includes(l.status)).length,
-        unread_msgs: unreadMsgs,
       });
     }).catch(() => { /* ignore */ });
   }, [isAuthenticated, isAdmin, pathname]);
@@ -239,9 +232,6 @@ export default function SonexLayout({ children }: { children: React.ReactNode })
           <div className="ml-auto flex items-center gap-2">
             <button className="p-2 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors relative">
               <Bell size={18} />
-              {badges.unread_msgs > 0 && (
-                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-500" />
-              )}
             </button>
           </div>
         </header>
