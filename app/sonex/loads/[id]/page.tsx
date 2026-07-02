@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Calendar, Check, DollarSign, ExternalLink, FileText,
-  MapPin, Package, Save, Truck, Upload,
+  MapPin, Package, Save, Truck, Upload, RefreshCw,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { CheckinTimeline } from '@/components/sonex/CheckinTimeline';
@@ -15,6 +15,7 @@ import {
   updateLoad,
 } from '@/lib/sonexStore';
 import type { CheckinEvent, LoadStatus, SonexCarrier, SonexLoad, SonexLoadCheckin } from '@/lib/sonexTypes';
+import { uploadFile } from '@/lib/storageUtils';
 import {
   CHECKIN_EVENT_LABELS,
   EQUIPMENT_TYPE_LABELS,
@@ -135,12 +136,18 @@ export default function LoadDetailPage() {
     }, 'Load saved');
   };
 
-  const handleUpload = (field: DocumentField, file: File) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      patch({ [field]: reader.result as string } as Partial<SonexLoad>, 'Document uploaded');
-    };
-    reader.readAsDataURL(file);
+  const [uploadingField, setUploadingField] = useState<DocumentField | null>(null);
+
+  const handleUpload = async (field: DocumentField, file: File) => {
+    setUploadingField(field);
+    try {
+      const result = await uploadFile(file, 'load-documents', `${load.id}/${field}`);
+      await patch({ [field]: result.url } as Partial<SonexLoad>, 'Document uploaded');
+    } catch (error) {
+      toast.error('Upload failed. Please try again.');
+    } finally {
+      setUploadingField(null);
+    }
   };
 
   const handleCheckin = async (event: CheckinEvent) => {
@@ -262,10 +269,16 @@ export default function LoadDetailPage() {
                         <p className="text-xs text-slate-500">{doc.hint}</p>
                       </div>
                       <div className="flex gap-2">
-                        <label className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-2.5 py-2 text-[11px] font-semibold text-amber-400 transition-colors hover:bg-amber-500/10">
-                          <Upload size={12} /> {value ? 'Update' : 'Upload'}
+                        <label className={`flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-2.5 py-2 text-[11px] font-semibold text-amber-400 transition-colors hover:bg-amber-500/10 ${uploadingField === doc.field ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                          {uploadingField === doc.field ? (
+                            <RefreshCw size={12} className="animate-spin text-amber-500" />
+                          ) : (
+                            <Upload size={12} />
+                          )}
+                          {uploadingField === doc.field ? 'Uploading...' : value ? 'Update' : 'Upload'}
                           <input
                             type="file"
+                            disabled={uploadingField === doc.field}
                             className="hidden"
                             accept=".pdf,.jpg,.jpeg,.png,.heic"
                             onChange={e => {
