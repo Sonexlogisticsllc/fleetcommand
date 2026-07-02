@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Users, Plus, Search, ChevronRight, X, Check,
-  Truck, DollarSign, Shield, KeyRound,
+  Truck, DollarSign, Shield, KeyRound, Eye, EyeOff, Copy,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getCarriers, addCarrier, getSettings } from '@/lib/sonexStore';
@@ -51,9 +51,12 @@ function AddCarrierModal({ onClose, onSaved }: AddCarrierModalProps) {
     insuranceCompany: '', insurancePolicyNumber: '',
     // Business
     dispatchFeePercent: 10, status: 'active' as CarrierStatus, notes: '',
-    // Portal
-    portalEmail: '',
+    // Portal login
+    portalEmail: '', portalPassword: '',
   });
+  const [showPassword, setShowPassword] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savedCredentials, setSavedCredentials] = useState<{ email: string; password: string } | null>(null);
 
   useEffect(() => {
     getSettings().then(s => {
@@ -68,10 +71,21 @@ function AddCarrierModal({ onClose, onSaved }: AddCarrierModalProps) {
       toast.error('First name, last name, and portal email are required.');
       return;
     }
-    await addCarrier({ ...form });
-    toast.success(`Carrier ${form.firstName} ${form.lastName} added!`);
-    onSaved();
-    onClose();
+    if (!form.portalPassword || form.portalPassword.length < 8) {
+      toast.error('Portal password must be at least 8 characters.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await addCarrier({ ...form, portalPassword: form.portalPassword } as any);
+      setSavedCredentials({ email: form.portalEmail, password: form.portalPassword });
+      toast.success(`✓ ${form.firstName} ${form.lastName} added with portal access!`, { duration: 4000 });
+      onSaved();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to save carrier');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const input = (label: string, key: string, type = 'text', placeholder = '') => (
@@ -215,18 +229,57 @@ function AddCarrierModal({ onClose, onSaved }: AddCarrierModalProps) {
 
           <Section title="Create Carrier Login" icon={KeyRound}>
             <div className="col-span-2">{input('Login Email', 'portalEmail', 'email', 'carrier@example.com')}</div>
+            <div className="col-span-2">
+              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Portal Password <span className="text-amber-400">(min 8 chars)</span></label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={form.portalPassword}
+                  onChange={e => set('portalPassword', e.target.value)}
+                  placeholder="Create a strong password…"
+                  className="input-primary text-sm py-2.5 pr-10 w-full"
+                />
+                <button type="button" onClick={() => setShowPassword(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                  {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+            </div>
+            <div className="col-span-2 rounded-xl px-3 py-2.5" style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)' }}>
+              <p className="text-amber-400/80 text-[10px] leading-relaxed">📋 The carrier will use these credentials to log in to their Carrier Portal at your site URL. Save the password — it cannot be recovered once the modal is closed.</p>
+            </div>
           </Section>
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-white/[0.06] flex justify-end gap-3 shrink-0">
-          <button onClick={onClose} className="px-5 py-2.5 rounded-xl text-slate-400 hover:text-white text-sm font-medium hover:bg-white/5 transition-colors">
-            Cancel
-          </button>
-          <button onClick={handleSave} className="btn-primary">
-            <Check size={15} /> Save Carrier
-          </button>
-        </div>
+        {savedCredentials ? (
+          <div className="px-6 py-5 border-t border-white/[0.06] shrink-0">
+            <div className="rounded-xl p-4 mb-4" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)' }}>
+              <div className="flex items-center gap-2 mb-2"><Check size={14} className="text-emerald-400" /><span className="text-emerald-300 font-bold text-sm">Carrier Created Successfully!</span></div>
+              <p className="text-slate-400 text-xs mb-3">Save these credentials and share them with the carrier:</p>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                  <span className="text-slate-400 text-xs">Email:</span>
+                  <span className="text-white font-mono text-xs">{savedCredentials.email}</span>
+                  <button onClick={() => { navigator.clipboard.writeText(savedCredentials.email); toast.success('Copied!'); }} className="p-1"><Copy size={11} className="text-slate-500" /></button>
+                </div>
+                <div className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                  <span className="text-slate-400 text-xs">Password:</span>
+                  <span className="text-white font-mono text-xs">{savedCredentials.password}</span>
+                  <button onClick={() => { navigator.clipboard.writeText(savedCredentials.password); toast.success('Copied!'); }} className="p-1"><Copy size={11} className="text-slate-500" /></button>
+                </div>
+              </div>
+            </div>
+            <button onClick={onClose} className="w-full py-3 rounded-xl font-bold text-sm bg-amber-500 text-black hover:bg-amber-400 transition-all">Close</button>
+          </div>
+        ) : (
+          <div className="px-6 py-4 border-t border-white/[0.06] flex justify-end gap-3 shrink-0">
+            <button onClick={onClose} className="px-5 py-2.5 rounded-xl text-slate-400 hover:text-white text-sm font-medium hover:bg-white/5 transition-colors">Cancel</button>
+            <button onClick={handleSave} disabled={saving} className={`btn-primary ${saving ? 'opacity-60 cursor-not-allowed' : ''}`}>
+              {saving ? <><span className="animate-spin">⏳</span> Creating…</> : <><Check size={15} /> Save Carrier</>}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

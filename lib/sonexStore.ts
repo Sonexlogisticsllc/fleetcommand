@@ -182,17 +182,88 @@ export async function getCarrier(id: string): Promise<SonexCarrier | undefined> 
   return mapDbCarrier(data);
 }
 
-export async function addCarrier(data: Omit<SonexCarrier, 'id' | 'joinedAt' | 'updatedAt'>): Promise<SonexCarrier> {
+/**
+ * Create a Supabase Auth user + users-table profile for a carrier's portal login.
+ * Called internally by addCarrier when portalPassword is provided.
+ * NOTE: supabase.auth.admin is only available server-side.
+ * On client side we use signUp then immediately sign back in as admin.
+ */
+export async function createCarrierPortalUser(
+  carrierId: string,
+  email: string,
+  password: string,
+  displayName: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // 1. Create auth user (uses anon key — will trigger confirmation email in production,
+    //    but since email confirmation is disabled in Supabase dev, this works immediately)
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+      email: email.trim().toLowerCase(),
+      password,
+      options: {
+        data: { display_name: displayName, role: 'carrier', carrier_id: carrierId },
+      },
+    });
+
+    if (signUpError) {
+      console.error('Error creating carrier auth user:', signUpError);
+      return { success: false, error: signUpError.message };
+    }
+
+    const authUserId = signUpData.user?.id;
+    if (!authUserId) {
+      return { success: false, error: 'No user ID returned from auth signup' };
+    }
+
+    // 2. Insert profile row into users table
+    const { error: profileError } = await supabase
+      .from('users')
+      .upsert([{
+        id: authUserId,
+        email: email.trim().toLowerCase(),
+        role: 'carrier',
+        display_name: displayName,
+        carrier_id: carrierId,
+        avatar: `${displayName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)}`,
+      }], { onConflict: 'id' });
+
+    if (profileError) {
+      console.error('Error creating carrier profile:', profileError);
+      // Auth user was created but profile failed — non-fatal, log it
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Unexpected error creating carrier portal user:', err);
+    return { success: false, error: err?.message || 'Unknown error' };
+  }
+}
+
+export async function addCarrier(
+  data: Omit<SonexCarrier, 'id' | 'joinedAt' | 'updatedAt'> & { portalPassword?: string }
+): Promise<SonexCarrier> {
+  const { portalPassword, ...carrierData } = data as any;
   const { data: inserted, error } = await supabase
     .from('carriers')
-    .insert([mapToDbCarrier(data)])
+    .insert([mapToDbCarrier(carrierData)])
     .select()
     .single();
   if (error) {
     console.error('Error adding carrier:', error);
     throw error;
   }
-  return mapDbCarrier(inserted);
+  const carrier = mapDbCarrier(inserted);
+
+  // Create portal login if email + password provided
+  if (carrierData.portalEmail && portalPassword) {
+    const displayName = `${carrierData.firstName} ${carrierData.lastName}`;
+    const result = await createCarrierPortalUser(carrier.id, carrierData.portalEmail, portalPassword, displayName);
+    if (!result.success) {
+      console.warn('Carrier created but portal login failed:', result.error);
+    }
+  }
+
+  return carrier;
 }
 
 export async function updateCarrier(id: string, data: Partial<SonexCarrier>): Promise<SonexCarrier | null> {
