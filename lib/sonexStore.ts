@@ -201,7 +201,14 @@ export async function createCarrierPortalUser(
       email: email.trim().toLowerCase(),
       password,
       options: {
-        data: { display_name: displayName, role: 'carrier', carrier_id: carrierId },
+        data: { 
+          display_name: displayName, 
+          displayName: displayName, 
+          role: 'carrier', 
+          carrier_id: carrierId, 
+          carrierId: carrierId,
+          avatar: `${displayName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)}`
+        },
       },
     });
 

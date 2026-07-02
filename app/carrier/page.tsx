@@ -11,10 +11,10 @@ import toast from 'react-hot-toast';
 import { useSonexAuth } from '@/lib/sonexAuth';
 import {
   getLoadsByCarrier, getCheckins, addCheckin, updateLoad,
-  addCargoPhoto, getCargoPhotos, addMessage,
+  addCargoPhoto, getCargoPhotos, addMessage, getCarriers,
 } from '@/lib/sonexStore';
 import { uploadFile, uploadFiles } from '@/lib/storageUtils';
-import type { SonexLoad, SonexLoadCheckin, SonexCargoPhoto, CheckinEvent, LoadStatus } from '@/lib/sonexTypes';
+import type { SonexLoad, SonexLoadCheckin, SonexCargoPhoto, CheckinEvent, LoadStatus, SonexCarrier } from '@/lib/sonexTypes';
 import { LOAD_STATUS_LABELS, CHECKIN_EVENT_LABELS } from '@/lib/sonexTypes';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -914,28 +914,61 @@ function PastLoadRow({ load }: { load: SonexLoad }) {
 
 export default function CarrierLoadsPage() {
   const { user } = useSonexAuth();
-  const carrierId = user?.carrierId ?? '';
+  
+  // Local state to store selected demo carrier
+  const [demoCarrierId, setDemoCarrierId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('sonex_demo_carrier_id') || '';
+    }
+    return '';
+  });
+  
+  const [carriers, setCarriers] = useState<SonexCarrier[]>([]);
   const [loads, setLoads] = useState<SonexLoad[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Effective carrierId
+  const carrierId = demoCarrierId || user?.carrierId || '';
+
+  // Load all carriers for developer demo simulation
+  useEffect(() => {
+    getCarriers().then(setCarriers).catch(console.error);
+  }, []);
+
   const refresh = useCallback(async () => {
-    if (!carrierId) return;
-    const all = await getLoadsByCarrier(carrierId);
-    all.sort((a, b) => {
-      const aActive = ACTIVE_STATUSES.includes(a.status);
-      const bActive = ACTIVE_STATUSES.includes(b.status);
-      if (aActive && !bActive) return -1;
-      if (!aActive && bActive) return 1;
-      return new Date(b.pickupDate).getTime() - new Date(a.pickupDate).getTime();
-    });
-    setLoads(all);
-    setLoading(false);
+    if (!carrierId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const all = await getLoadsByCarrier(carrierId);
+      all.sort((a, b) => {
+        const aActive = ACTIVE_STATUSES.includes(a.status);
+        const bActive = ACTIVE_STATUSES.includes(b.status);
+        if (aActive && !bActive) return -1;
+        if (!aActive && bActive) return 1;
+        return new Date(b.pickupDate).getTime() - new Date(a.pickupDate).getTime();
+      });
+      setLoads(all);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
   }, [carrierId]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
   const activeLoad = loads.find(l => ACTIVE_STATUSES.includes(l.status));
   const pastLoads = loads.filter(l => COMPLETED_STATUSES.includes(l.status));
+
+  const handleDemoCarrierChange = (id: string) => {
+    setDemoCarrierId(id);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sonex_demo_carrier_id', id);
+    }
+  };
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
@@ -951,7 +984,43 @@ export default function CarrierLoadsPage() {
         </a>
       </div>
 
-      {loading ? (
+      {/* Demo Carrier Switcher — extremely helpful for testing */}
+      {carriers.length > 0 && (
+        <div className="rounded-2xl p-4 flex flex-col gap-2.5" style={{ background: 'rgba(245,158,11,0.04)', border: '1px solid rgba(245,158,11,0.15)' }}>
+          <div className="flex items-center justify-between">
+            <span className="text-amber-400 text-xs font-black uppercase tracking-wider">🔧 Developer Carrier Simulator</span>
+            {carrierId && (
+              <span className="text-[10px] text-slate-500">Currently viewing: {carriers.find(c => c.id === carrierId)?.firstName || 'Selected'}</span>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <select
+              value={carrierId}
+              onChange={e => handleDemoCarrierChange(e.target.value)}
+              className="flex-1 bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500/40"
+            >
+              <option value="" className="bg-[#050B18]">-- Select Carrier Profile to Simulate --</option>
+              {carriers.map(c => (
+                <option key={c.id} value={c.id} className="bg-[#050B18]">
+                  {c.firstName} {c.lastName} ({c.equipmentType})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
+
+      {!carrierId ? (
+        <div className="flex flex-col items-center justify-center py-20 px-6 text-center rounded-2xl border border-white/[0.06] bg-white/[0.01]">
+          <div className="w-16 h-16 rounded-xl bg-white/[0.04] flex items-center justify-center mb-4">
+            <AlertTriangle size={32} className="text-amber-500" />
+          </div>
+          <h3 className="text-white text-base font-bold mb-1">Carrier Link Required</h3>
+          <p className="text-slate-400 text-xs max-w-sm leading-relaxed">
+            This account is not linked to any carrier profile in the database. Please select a carrier from the simulator above to preview the portal features.
+          </p>
+        </div>
+      ) : loading ? (
         <div className="flex items-center justify-center py-16">
           <RefreshCw size={24} className="text-amber-500 animate-spin" />
         </div>
@@ -970,7 +1039,7 @@ export default function CarrierLoadsPage() {
         </div>
       )}
 
-      {pastLoads.length > 0 && (
+      {carrierId && pastLoads.length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-3">
             <DollarSign size={16} className="text-amber-500/60" />
