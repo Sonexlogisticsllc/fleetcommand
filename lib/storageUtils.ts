@@ -22,7 +22,77 @@ export interface UploadResult {
 }
 
 /**
+ * Compresses an image file on the client side using HTML Canvas.
+ * Downscales images larger than maxW/maxH and encodes at specified JPEG quality.
+ */
+export function compressImage(
+  file: File,
+  maxW = 1600,
+  maxH = 1600,
+  quality = 0.8,
+): Promise<File | Blob> {
+  return new Promise((resolve) => {
+    // Only compress images (exclude SVG, GIF, etc. if needed, but JPEG/PNG are primary targets)
+    if (!file.type.startsWith('image/') || file.type.includes('svg') || file.type.includes('gif')) {
+      resolve(file);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        // Downscale maintaining aspect ratio
+        if (width > maxW || height > maxH) {
+          if (width > height) {
+            height = Math.round((height * maxW) / width);
+            width = maxW;
+          } else {
+            width = Math.round((width * maxH) / height);
+            height = maxH;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(file);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
+                type: 'image/jpeg',
+                lastModified: Date.now(),
+              });
+              resolve(compressedFile);
+            } else {
+              resolve(file);
+            }
+          },
+          'image/jpeg',
+          quality,
+        );
+      };
+      img.onerror = () => resolve(file);
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => resolve(file);
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
  * Upload a file to Supabase Storage and return its public URL.
+ * Automatically compresses image files client-side before uploading.
  * Falls back gracefully to base64 if Storage upload fails.
  */
 export async function uploadFile(
@@ -30,6 +100,16 @@ export async function uploadFile(
   bucket: StorageBucket,
   pathPrefix: string = '',
 ): Promise<UploadResult> {
+  // Compress images to save storage and user bandwidth
+  let fileToUpload: File | Blob = file;
+  if (file.type.startsWith('image/')) {
+    try {
+      fileToUpload = await compressImage(file);
+    } catch (e) {
+      console.warn('Image compression failed, uploading original:', e);
+    }
+  }
+
   // Build a unique path
   const ext = file.name.split('.').pop() || 'bin';
   const timestamp = Date.now();
@@ -41,14 +121,14 @@ export async function uploadFile(
 
   const { data, error } = await supabase.storage
     .from(bucket)
-    .upload(path, file, {
+    .upload(path, fileToUpload, {
       cacheControl: '3600',
       upsert: false,
     });
 
   if (error) {
     console.error(`Storage upload failed for bucket "${bucket}":`, error.message);
-    // Fallback: return base64 data URL
+    // Fallback: return base64 data URL (read the original file or compressed one)
     const base64Url = await fileToBase64(file);
     return { url: base64Url, path: '', bucket };
   }

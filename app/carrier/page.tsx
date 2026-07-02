@@ -5,13 +5,13 @@ import {
   Truck, MapPin, PackageCheck, CheckCircle, Camera, FileUp, Download,
   AlertTriangle, Clock, Weight, DollarSign, Building2, Timer,
   Moon, Zap, XCircle, PhoneCall, ChevronDown, RefreshCw, Plus,
-  Image as ImageIcon, FileText, Trash2, Eye,
+  Image as ImageIcon, FileText, Trash2, Eye, Navigation, AlertOctagon,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useSonexAuth } from '@/lib/sonexAuth';
 import {
   getLoadsByCarrier, getCheckins, addCheckin, updateLoad,
-  addCargoPhoto, getCargoPhotos,
+  addCargoPhoto, getCargoPhotos, addMessage,
 } from '@/lib/sonexStore';
 import { uploadFile, uploadFiles } from '@/lib/storageUtils';
 import type { SonexLoad, SonexLoadCheckin, SonexCargoPhoto, CheckinEvent, LoadStatus } from '@/lib/sonexTypes';
@@ -452,6 +452,42 @@ function UploadSlotCard({ slot, load, photos, doneEvents, onRefresh, carrierId }
   );
 }
 
+/**
+ * Live ticking clock for active Detention or Layover times.
+ */
+function LiveTimer({ startTime, label, colorClass = 'text-amber-400' }: { startTime: string; label: string; colorClass?: string }) {
+  const [elapsed, setElapsed] = useState('');
+
+  useEffect(() => {
+    const start = new Date(startTime).getTime();
+    const update = () => {
+      const diffMs = Date.now() - start;
+      const secs = Math.floor(diffMs / 1000) % 60;
+      const mins = Math.floor(diffMs / 60000) % 60;
+      const hrs = Math.floor(diffMs / 3600000);
+      setElapsed(
+        `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+      );
+    };
+    update();
+    const timer = setInterval(update, 1000);
+    return () => clearInterval(timer);
+  }, [startTime]);
+
+  return (
+    <div className="flex items-center justify-between p-3.5 rounded-xl border border-amber-500/20 bg-amber-500/5 animate-pulse mb-3">
+      <div className="flex items-center gap-2">
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+        </span>
+        <span className="text-slate-300 text-xs font-semibold">{label}</span>
+      </div>
+      <span className={`font-mono font-black text-sm ${colorClass}`}>{elapsed}</span>
+    </div>
+  );
+}
+
 // ─── Active Load Card ─────────────────────────────────────────────────────────
 
 interface ActiveLoadCardProps {
@@ -486,6 +522,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
     setPendingEvent(null);
     try {
       await addCheckin({ loadId: load.id, event, timestamp: new Date().toISOString(), notes, loggedBy: 'carrier' });
+      
       const statusMap: Partial<Record<CheckinEvent, LoadStatus>> = {
         arrived_pickup: 'dispatched',
         loaded_departing: 'in_transit',
@@ -493,6 +530,30 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
         delivered: 'delivered',
       };
       if (statusMap[event]) await updateLoad(load.id, { status: statusMap[event] });
+
+      // Auto-send chat message to dispatcher for critical events
+      const alertEvents: CheckinEvent[] = ['breakdown', 'accident', 'detention_start', 'layover_start', 'tonu'];
+      if (alertEvents.includes(event)) {
+        let msgText = '';
+        if (event === 'breakdown') msgText = `🚨 SOS BREAKDOWN REPORTED for Load ${load.loadNumber}\nDetails: ${notes || 'No description provided'}`;
+        else if (event === 'accident') msgText = `🚨 SOS ACCIDENT REPORTED for Load ${load.loadNumber}\nDetails: ${notes || 'No description provided'}`;
+        else if (event === 'detention_start') msgText = `⏳ DETENTION STARTED for Load ${load.loadNumber}\nWaiting at facility. Notes: ${notes || 'None'}`;
+        else if (event === 'layover_start') msgText = `🌙 LAYOVER STARTED for Load ${load.loadNumber}\nOvernight hold at location. Notes: ${notes || 'None'}`;
+        else if (event === 'tonu') msgText = `⚠️ TONU (Truck Ordered Not Used) requested for Load ${load.loadNumber}.\nNotes: ${notes || 'None'}`;
+
+        if (msgText) {
+          await addMessage({
+            carrierId: load.carrierId,
+            senderId: load.carrierId,
+            senderName: user?.displayName || 'Driver',
+            senderRole: 'carrier',
+            messageText: msgText,
+            read: false,
+            createdAt: new Date().toISOString(),
+          });
+        }
+      }
+
       toast.success(`✓ ${CHECKIN_EVENT_LABELS[event]} logged!`, {
         style: { background: '#0D1F3C', color: '#FCD34D', border: '1px solid rgba(245,158,11,0.3)' },
       });
@@ -569,21 +630,35 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
               <MapPin size={14} className="text-amber-400" />
             </div>
             <div className="flex-1 space-y-3">
-              <div>
-                <div className="text-white font-semibold text-base leading-tight">{load.pickupCity}, {load.pickupState}</div>
-                <div className="text-slate-400 text-xs mt-0.5">{load.pickupFacility}</div>
-                <div className="text-slate-500 text-xs mt-0.5 flex items-center gap-1.5">
-                  <Clock size={11} />{fmtDate(load.pickupDate)} · {fmtTime(load.pickupTime)}
-                  {load.pickupApptNumber && <span className="text-amber-500/70">· Appt #{load.pickupApptNumber}</span>}
+              <div className="flex justify-between items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="text-white font-semibold text-sm leading-snug">{load.pickupCity}, {load.pickupState}</div>
+                  <div className="text-slate-400 text-xs mt-0.5 truncate">{load.pickupFacility} {load.pickupAddress && `· ${load.pickupAddress}`}</div>
+                  <div className="text-slate-500 text-[11px] mt-0.5 flex items-center gap-1">
+                    <Clock size={11} />{fmtDate(load.pickupDate)} · {fmtTime(load.pickupTime)}
+                    {load.pickupApptNumber && <span className="text-amber-500/70">· Appt #{load.pickupApptNumber}</span>}
+                  </div>
                 </div>
+                <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${load.pickupFacility} ${load.pickupAddress || ''} ${load.pickupCity} ${load.pickupState} ${load.pickupZip || ''}`)}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 transition-all shrink-0">
+                  <Navigation size={10} /> Navigate
+                </a>
               </div>
-              <div>
-                <div className="text-white font-semibold text-base leading-tight">{load.deliveryCity}, {load.deliveryState}</div>
-                <div className="text-slate-400 text-xs mt-0.5">{load.deliveryFacility}</div>
-                <div className="text-slate-500 text-xs mt-0.5 flex items-center gap-1.5">
-                  <Clock size={11} />{fmtDate(load.deliveryDate)} · {fmtTime(load.deliveryTime)}
-                  {load.deliveryApptNumber && <span className="text-amber-500/70">· Appt #{load.deliveryApptNumber}</span>}
+              <div className="flex justify-between items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="text-white font-semibold text-sm leading-snug">{load.deliveryCity}, {load.deliveryState}</div>
+                  <div className="text-slate-400 text-xs mt-0.5 truncate">{load.deliveryFacility} {load.deliveryAddress && `· ${load.deliveryAddress}`}</div>
+                  <div className="text-slate-500 text-[11px] mt-0.5 flex items-center gap-1">
+                    <Clock size={11} />{fmtDate(load.deliveryDate)} · {fmtTime(load.deliveryTime)}
+                    {load.deliveryApptNumber && <span className="text-amber-500/70">· Appt #{load.deliveryApptNumber}</span>}
+                  </div>
                 </div>
+                <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${load.deliveryFacility} ${load.deliveryAddress || ''} ${load.deliveryCity} ${load.deliveryState} ${load.deliveryZip || ''}`)}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 transition-all shrink-0">
+                  <Navigation size={10} /> Navigate
+                </a>
               </div>
             </div>
           </div>
@@ -639,6 +714,21 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
           {/* ── Check-In Tab ──────────────────────────────────────────────── */}
           {activeTab === 'checkin' && (
             <div className="px-5 py-5 space-y-4">
+              {/* Live Active Timers */}
+              {hasDetentionRunning && checkins.find(c => c.event === 'detention_start') && (
+                <LiveTimer 
+                  startTime={checkins.find(c => c.event === 'detention_start')!.timestamp} 
+                  label="Active Facility Detention Timer" 
+                />
+              )}
+              {hasLayoverRunning && checkins.find(c => c.event === 'layover_start') && (
+                <LiveTimer 
+                  startTime={checkins.find(c => c.event === 'layover_start')!.timestamp} 
+                  label="Active Overnight Layover Timer" 
+                  colorClass="text-violet-400" 
+                />
+              )}
+
               {/* Progress bar */}
               <div>
                 <div className="text-xs text-slate-500 uppercase tracking-widest mb-3">Trip Progress</div>
@@ -849,9 +939,16 @@ export default function CarrierLoadsPage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-      <div>
-        <h1 className="text-xl font-black text-white tracking-tight">My Loads</h1>
-        <p className="text-slate-500 text-sm mt-0.5">Active assignment and history</p>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-black text-white tracking-tight">My Loads</h1>
+          <p className="text-slate-500 text-sm mt-0.5">Active assignment and history</p>
+        </div>
+        <a href="tel:(346)421-2681" 
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-all shrink-0 tracking-wide uppercase">
+          <AlertOctagon size={13} className="animate-pulse" />
+          SOS Support
+        </a>
       </div>
 
       {loading ? (
