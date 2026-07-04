@@ -14,18 +14,22 @@ const STATUS_COLORS: Record<LoadStatus, { bg: string; border: string; text: stri
   paid:        { bg: 'rgba(34,197,94,0.12)',   border: 'rgba(34,197,94,0.3)',   text: '#4ADE80', dot: '#22C55E' },
 };
 
+function getStatusColors(status: LoadStatus) {
+  return STATUS_COLORS[status] || {
+    bg: 'rgba(100, 116, 139, 0.12)',
+    border: 'rgba(100, 116, 139, 0.3)',
+    text: '#94A3B8',
+    dot: '#64748B',
+  };
+}
+
 interface StatusBadgeProps {
   status: LoadStatus;
   size?: 'sm' | 'md';
 }
 
 export function LoadStatusBadge({ status, size = 'md' }: StatusBadgeProps) {
-  const c = STATUS_COLORS[status] || {
-    bg: 'rgba(100, 116, 139, 0.12)',
-    border: 'rgba(100, 116, 139, 0.3)',
-    text: '#94A3B8',
-    dot: '#64748B',
-  };
+  const c = getStatusColors(status);
   const label = LOAD_STATUS_LABELS[status] || status || 'Unknown';
   return (
     <span
@@ -52,7 +56,7 @@ export function StatusPipeline({ currentStatus, compact = false }: StatusPipelin
     return (
       <div className="flex items-center gap-1 overflow-x-auto">
         {LOAD_STATUS_ORDER.map((status, idx) => {
-          const c = STATUS_COLORS[status];
+          const c = getStatusColors(status);
           const isCompleted = idx < currentIndex;
           const isCurrent = idx === currentIndex;
           const isFuture = idx > currentIndex;
@@ -91,7 +95,7 @@ export function StatusPipeline({ currentStatus, compact = false }: StatusPipelin
   return (
     <div className="flex items-start gap-0 overflow-x-auto pb-1">
       {LOAD_STATUS_ORDER.map((status, idx) => {
-        const c = STATUS_COLORS[status];
+        const c = getStatusColors(status);
         const isCompleted = idx < currentIndex;
         const isCurrent = idx === currentIndex;
         const isFuture = idx > currentIndex;
@@ -120,7 +124,7 @@ export function StatusPipeline({ currentStatus, compact = false }: StatusPipelin
                   isFuture ? 'text-slate-700' : isCurrent ? 'text-white' : 'text-slate-500'
                 }`}
               >
-                {LOAD_STATUS_LABELS[status]}
+                {LOAD_STATUS_LABELS[status] || status}
               </span>
             </div>
             {idx < LOAD_STATUS_ORDER.length - 1 && (
