@@ -11,13 +11,13 @@ import toast from 'react-hot-toast';
 import { useSonexAuth } from '@/lib/sonexAuth';
 import {
   getLoadsByCarrier, getCheckins, addCheckin, updateLoad,
-  addCargoPhoto, getCargoPhotos, addMessage, getCarriers,
+  addCargoPhoto, getCargoPhotos, getCarriers,
 } from '@/lib/sonexStore';
 import { uploadFile, uploadFiles } from '@/lib/storageUtils';
 import type { SonexLoad, SonexLoadCheckin, SonexCargoPhoto, CheckinEvent, LoadStatus, SonexCarrier } from '@/lib/sonexTypes';
 import { LOAD_STATUS_LABELS, CHECKIN_EVENT_LABELS } from '@/lib/sonexTypes';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 type PhotoStage = 'pickup' | 'delivery';
 
@@ -37,7 +37,7 @@ interface StageUploadConfig {
   unlock: CheckinEvent[];  // which checkin events must be done to unlock this slot
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const ACTIVE_STATUSES: LoadStatus[] = ['booked', 'dispatched', 'in_transit'];
 const COMPLETED_STATUSES: LoadStatus[] = ['delivered', 'pod_received', 'invoiced', 'paid'];
@@ -75,7 +75,7 @@ const CHECKIN_CONFIGS: Record<CheckinEvent, {
   Icon: React.ElementType; color: string; bg: string; border: string;
 }> = {
   arrived_pickup:   { label: 'Arrived at Pickup',  Icon: Truck,        color: 'text-black', bg: 'bg-amber-500 hover:bg-amber-400',   border: 'border-amber-400' },
-  loaded_departing: { label: 'Loaded — Departing', Icon: PackageCheck, color: 'text-black', bg: 'bg-amber-500 hover:bg-amber-400',   border: 'border-amber-400' },
+  loaded_departing: { label: 'Loaded â€” Departing', Icon: PackageCheck, color: 'text-black', bg: 'bg-amber-500 hover:bg-amber-400',   border: 'border-amber-400' },
   arrived_delivery: { label: 'Arrived at Delivery',Icon: MapPin,       color: 'text-black', bg: 'bg-amber-500 hover:bg-amber-400',   border: 'border-amber-400' },
   delivered:        { label: 'Mark as Delivered',  Icon: CheckCircle,  color: 'text-white', bg: 'bg-emerald-600 hover:bg-emerald-500',border: 'border-emerald-500' },
   detention_start:  { label: 'Start Detention',    subLabel: 'Waiting at facility', Icon: Timer, color: 'text-black', bg: 'bg-orange-500 hover:bg-orange-400', border: 'border-orange-400' },
@@ -95,16 +95,16 @@ function getNextCheckin(checkins: SonexLoadCheckin[]): CheckinEvent | null {
   return null;
 }
 
-// ─── Upload slot config per stage ─────────────────────────────────────────────
+// â”€â”€â”€ Upload slot config per stage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function getUploadSlots(doneEvents: Set<CheckinEvent>): StageUploadConfig[] {
   return [
-    // ── Pickup stage ──────────────────────────────────────────────────────────
+    // â”€â”€ Pickup stage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     {
       key: 'bol',
       stage: 'pickup',
       label: 'Bill of Lading (BOL)',
-      sublabel: 'Signed BOL at pickup — required',
+      sublabel: 'Signed BOL at pickup â€” required',
       docField: 'bolUrl',
       color: '#F59E0B', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.25)',
       Icon: FileText,
@@ -156,12 +156,12 @@ function getUploadSlots(doneEvents: Set<CheckinEvent>): StageUploadConfig[] {
       multiple: true,
       unlock: ['arrived_pickup'],
     },
-    // ── Delivery stage ────────────────────────────────────────────────────────
+    // â”€â”€ Delivery stage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     {
       key: 'pod',
       stage: 'delivery',
       label: 'Proof of Delivery (POD)',
-      sublabel: 'Signed POD — advances status',
+      sublabel: 'Signed POD â€” advances status',
       docField: 'podUrl',
       advancesStatus: 'pod_received',
       color: '#10B981', bg: 'rgba(16,185,129,0.10)', border: 'rgba(16,185,129,0.30)',
@@ -228,7 +228,7 @@ function getUploadSlots(doneEvents: Set<CheckinEvent>): StageUploadConfig[] {
   ];
 }
 
-// ─── Components ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function StatusBadge({ status }: { status: LoadStatus }) {
   return (
@@ -238,7 +238,7 @@ function StatusBadge({ status }: { status: LoadStatus }) {
   );
 }
 
-// ─── Notes Modal ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Notes Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface NotesModalProps {
   event: CheckinEvent;
@@ -269,7 +269,7 @@ function NotesModal({ event, onConfirm, onCancel, loading }: NotesModalProps) {
           <textarea
             value={notes}
             onChange={e => setNotes(e.target.value)}
-            placeholder="Add any details about this event…"
+            placeholder="Add any details about this eventâ€¦"
             rows={3}
             className="w-full rounded-xl px-4 py-3 text-sm text-white placeholder-slate-600 resize-none focus:outline-none"
             style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
@@ -282,7 +282,7 @@ function NotesModal({ event, onConfirm, onCancel, loading }: NotesModalProps) {
             </button>
             <button onClick={() => onConfirm(notes)} disabled={loading}
               className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all bg-amber-500 text-black hover:bg-amber-400 ${loading ? 'opacity-60 cursor-not-allowed' : ''}`}>
-              {loading ? 'Logging…' : 'Confirm'}
+              {loading ? 'Loggingâ€¦' : 'Confirm'}
             </button>
           </div>
         </div>
@@ -291,13 +291,13 @@ function NotesModal({ event, onConfirm, onCancel, loading }: NotesModalProps) {
   );
 }
 
-// ─── Photo Grid ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Photo Grid â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function PhotoGrid({ photos, label }: { photos: SonexCargoPhoto[]; label: string }) {
   if (!photos.length) return null;
   return (
     <div className="mt-2">
-      <div className="text-[10px] text-slate-600 uppercase tracking-widest mb-1.5">{label} — {photos.length} photo{photos.length !== 1 ? 's' : ''}</div>
+      <div className="text-[10px] text-slate-600 uppercase tracking-widest mb-1.5">{label} â€” {photos.length} photo{photos.length !== 1 ? 's' : ''}</div>
       <div className="flex flex-wrap gap-1.5">
         {photos.map(p => (
           <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer"
@@ -314,7 +314,7 @@ function PhotoGrid({ photos, label }: { photos: SonexCargoPhoto[]; label: string
   );
 }
 
-// ─── Upload Slot Card ─────────────────────────────────────────────────────────
+// â”€â”€â”€ Upload Slot Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface UploadSlotProps {
   slot: StageUploadConfig;
@@ -342,7 +342,7 @@ function UploadSlotCard({ slot, load, photos, doneEvents, onRefresh, carrierId }
     setUploading(true);
     try {
       if (slot.docField) {
-        // Single doc upload — store URL in load record
+        // Single doc upload â€” store URL in load record
         const file = files[0];
         const result = await uploadFile(file, 'load-documents', `${load.id}/${slot.key}`);
         const updateData: Partial<SonexLoad> = { [slot.docField]: result.url } as any;
@@ -350,9 +350,9 @@ function UploadSlotCard({ slot, load, photos, doneEvents, onRefresh, carrierId }
           (updateData as any).status = slot.advancesStatus;
         }
         await updateLoad(load.id, updateData as any);
-        toast.success(`✓ ${slot.label} uploaded!`);
+        toast.success(`âœ“ ${slot.label} uploaded!`);
       } else {
-        // Photo(s) upload — store as cargo photos
+        // Photo(s) upload â€” store as cargo photos
         const results = await uploadFiles(files, 'cargo-photos', `${load.id}`);
         for (const result of results) {
           await addCargoPhoto({
@@ -367,8 +367,9 @@ function UploadSlotCard({ slot, load, photos, doneEvents, onRefresh, carrierId }
         toast.success(`✓ ${results.length} photo${results.length > 1 ? 's' : ''} uploaded!`);
       }
       onRefresh();
-    } catch {
-      toast.error(`Upload failed. Please try again.`);
+    } catch (e: any) {
+      console.error('Upload error:', e);
+      toast.error(`Upload failed: ${e?.message || e || 'Unknown error'}`);
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';
@@ -412,7 +413,7 @@ function UploadSlotCard({ slot, load, photos, doneEvents, onRefresh, carrierId }
           )}
           {docUrl && (
             <div className="text-[10px] text-emerald-400 mt-1 flex items-center gap-1">
-              <CheckCircle size={9} /> Uploaded ✓
+              <CheckCircle size={9} /> Uploaded âœ“
             </div>
           )}
           {!unlocked && (
@@ -488,7 +489,7 @@ function LiveTimer({ startTime, label, colorClass = 'text-amber-400' }: { startT
   );
 }
 
-// ─── Active Load Card ─────────────────────────────────────────────────────────
+// â”€â”€â”€ Active Load Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface ActiveLoadCardProps {
   load: SonexLoad;
@@ -531,30 +532,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
       };
       if (statusMap[event]) await updateLoad(load.id, { status: statusMap[event] });
 
-      // Auto-send chat message to dispatcher for critical events
-      const alertEvents: CheckinEvent[] = ['breakdown', 'accident', 'detention_start', 'layover_start', 'tonu'];
-      if (alertEvents.includes(event)) {
-        let msgText = '';
-        if (event === 'breakdown') msgText = `🚨 SOS BREAKDOWN REPORTED for Load ${load.loadNumber}\nDetails: ${notes || 'No description provided'}`;
-        else if (event === 'accident') msgText = `🚨 SOS ACCIDENT REPORTED for Load ${load.loadNumber}\nDetails: ${notes || 'No description provided'}`;
-        else if (event === 'detention_start') msgText = `⏳ DETENTION STARTED for Load ${load.loadNumber}\nWaiting at facility. Notes: ${notes || 'None'}`;
-        else if (event === 'layover_start') msgText = `🌙 LAYOVER STARTED for Load ${load.loadNumber}\nOvernight hold at location. Notes: ${notes || 'None'}`;
-        else if (event === 'tonu') msgText = `⚠️ TONU (Truck Ordered Not Used) requested for Load ${load.loadNumber}.\nNotes: ${notes || 'None'}`;
-
-        if (msgText) {
-          await addMessage({
-            carrierId: load.carrierId,
-            senderId: load.carrierId,
-            senderName: user?.displayName || 'Driver',
-            senderRole: 'carrier',
-            messageText: msgText,
-            read: false,
-            createdAt: new Date().toISOString(),
-          });
-        }
-      }
-
-      toast.success(`✓ ${CHECKIN_EVENT_LABELS[event]} logged!`, {
+      toast.success(`âœ“ ${CHECKIN_EVENT_LABELS[event]} logged!`, {
         style: { background: '#0D1F3C', color: '#FCD34D', border: '1px solid rgba(245,158,11,0.3)' },
       });
       await refreshDetail();
@@ -633,14 +611,13 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
               <div className="flex justify-between items-start gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="text-white font-semibold text-sm leading-snug">{load.pickupCity}, {load.pickupState}</div>
-                  <div className="text-slate-400 text-xs mt-0.5 truncate">{load.pickupFacility} {load.pickupAddress && `· ${load.pickupAddress}`}</div>
+                  <div className="text-slate-400 text-xs mt-0.5 truncate">{load.pickupFacility} {load.pickupAddress && `Â· ${load.pickupAddress}`}</div>
                   <div className="text-slate-500 text-[11px] mt-0.5 flex items-center gap-1">
-                    <Clock size={11} />{fmtDate(load.pickupDate)} · {fmtTime(load.pickupTime)}
-                    {load.pickupApptNumber && <span className="text-amber-500/70">· Appt #{load.pickupApptNumber}</span>}
+                    <Clock size={11} />{fmtDate(load.pickupDate)} Â· {fmtTime(load.pickupTime)}
+                    {load.pickupApptNumber && <span className="text-amber-500/70">Â· Appt #{load.pickupApptNumber}</span>}
                   </div>
                 </div>
-                <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${load.pickupFacility} ${load.pickupAddress || ''} ${load.pickupCity} ${load.pickupState} ${load.pickupZip || ''}`)}`}
-                  target="_blank" rel="noopener noreferrer"
+                <a href={`geo:0,0?q=${encodeURIComponent(`${load.pickupFacility} ${load.pickupAddress || ''} ${load.pickupCity} ${load.pickupState} ${load.pickupZip || ''}`)}(${encodeURIComponent(load.pickupFacility.replace(/[()]/g, ''))})`}
                   className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 transition-all shrink-0">
                   <Navigation size={10} /> Navigate
                 </a>
@@ -648,14 +625,13 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
               <div className="flex justify-between items-start gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="text-white font-semibold text-sm leading-snug">{load.deliveryCity}, {load.deliveryState}</div>
-                  <div className="text-slate-400 text-xs mt-0.5 truncate">{load.deliveryFacility} {load.deliveryAddress && `· ${load.deliveryAddress}`}</div>
+                  <div className="text-slate-400 text-xs mt-0.5 truncate">{load.deliveryFacility} {load.deliveryAddress && `Â· ${load.deliveryAddress}`}</div>
                   <div className="text-slate-500 text-[11px] mt-0.5 flex items-center gap-1">
-                    <Clock size={11} />{fmtDate(load.deliveryDate)} · {fmtTime(load.deliveryTime)}
-                    {load.deliveryApptNumber && <span className="text-amber-500/70">· Appt #{load.deliveryApptNumber}</span>}
+                    <Clock size={11} />{fmtDate(load.deliveryDate)} Â· {fmtTime(load.deliveryTime)}
+                    {load.deliveryApptNumber && <span className="text-amber-500/70">Â· Appt #{load.deliveryApptNumber}</span>}
                   </div>
                 </div>
-                <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${load.deliveryFacility} ${load.deliveryAddress || ''} ${load.deliveryCity} ${load.deliveryState} ${load.deliveryZip || ''}`)}`}
-                  target="_blank" rel="noopener noreferrer"
+                <a href={`geo:0,0?q=${encodeURIComponent(`${load.deliveryFacility} ${load.deliveryAddress || ''} ${load.deliveryCity} ${load.deliveryState} ${load.deliveryZip || ''}`)}(${encodeURIComponent(load.deliveryFacility.replace(/[()]/g, ''))})`}
                   className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 transition-all shrink-0">
                   <Navigation size={10} /> Navigate
                 </a>
@@ -668,7 +644,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
             <div className="rounded-xl px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
               <div className="text-slate-500 text-[10px] uppercase tracking-widest flex items-center gap-1 mb-0.5"><Weight size={10} />Cargo</div>
               <div className="text-white text-sm font-medium truncate">{load.commodity}</div>
-              <div className="text-slate-400 text-xs">{load.weight.toLocaleString()} lbs · {load.miles.toLocaleString()} mi</div>
+              <div className="text-slate-400 text-xs">{load.weight.toLocaleString()} lbs Â· {load.miles.toLocaleString()} mi</div>
             </div>
             <div className="rounded-xl px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
               <div className="text-slate-500 text-[10px] uppercase tracking-widest flex items-center gap-1 mb-0.5"><Building2 size={10} />Broker</div>
@@ -681,7 +657,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
           <div className="mt-3 rounded-xl px-4 py-3" style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)' }}>
             <div className="flex items-center justify-between">
               <div><div className="text-slate-400 text-xs mb-0.5">Gross</div><div className="text-slate-300 text-sm font-mono">{fmt$(load.rate)}</div></div>
-              <div className="text-slate-600 text-sm">−</div>
+              <div className="text-slate-600 text-sm">âˆ’</div>
               <div><div className="text-slate-400 text-xs mb-0.5">Fee ({load.dispatchFeePercent}%)</div><div className="text-slate-400 text-sm font-mono">{fmt$(load.dispatchFeeAmount)}</div></div>
               <div className="text-amber-500/60 text-sm">=</div>
               <div className="text-right"><div className="text-amber-400/80 text-xs mb-0.5">Your Net</div><div className="text-amber-400 text-xl font-black font-mono">{fmt$(load.carrierNet)}</div></div>
@@ -696,7 +672,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
           )}
         </div>
 
-        {/* ── Tabs ────────────────────────────────────────────────────────── */}
+        {/* â”€â”€ Tabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
           <div className="flex" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
             {[
@@ -711,10 +687,24 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
             ))}
           </div>
 
-          {/* ── Check-In Tab ──────────────────────────────────────────────── */}
+          {/* â”€â”€ Check-In Tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           {activeTab === 'checkin' && (
             <div className="px-5 py-5 space-y-4">
               {/* Live Active Timers */}
+              {doneEvents.has('arrived_pickup') && !doneEvents.has('loaded_departing') && checkins.find(c => c.event === 'arrived_pickup') && (
+                <LiveTimer 
+                  startTime={checkins.find(c => c.event === 'arrived_pickup')!.timestamp} 
+                  label="Pickup Dwell Timer" 
+                  colorClass="text-amber-400"
+                />
+              )}
+              {doneEvents.has('arrived_delivery') && !doneEvents.has('delivered') && checkins.find(c => c.event === 'arrived_delivery') && (
+                <LiveTimer 
+                  startTime={checkins.find(c => c.event === 'arrived_delivery')!.timestamp} 
+                  label="Delivery Dwell Timer" 
+                  colorClass="text-amber-400"
+                />
+              )}
               {hasDetentionRunning && checkins.find(c => c.event === 'detention_start') && (
                 <LiveTimer 
                   startTime={checkins.find(c => c.event === 'detention_start')!.timestamp} 
@@ -774,13 +764,13 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
                   className={`w-full rounded-2xl font-bold text-lg flex items-center justify-center gap-3 transition-all active:scale-[0.98] ${CHECKIN_CONFIGS[nextEvent].bg} ${CHECKIN_CONFIGS[nextEvent].color} ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
                   style={{ height: '60px', border: '1px solid', borderColor: CHECKIN_CONFIGS[nextEvent].border.replace('border-', ''), boxShadow: '0 4px 20px rgba(245,158,11,0.15)' }}>
                   {React.createElement(CHECKIN_CONFIGS[nextEvent].Icon, { size: 22 })}
-                  {loading ? 'Logging…' : CHECKIN_CONFIGS[nextEvent].label}
+                  {loading ? 'Loggingâ€¦' : CHECKIN_CONFIGS[nextEvent].label}
                 </button>
               )}
               {!nextEvent && doneEvents.has('delivered') && (
                 <div className="w-full rounded-2xl flex items-center justify-center gap-2 py-4 text-emerald-400 font-semibold"
                   style={{ background: 'rgba(16,185,129,0.10)', border: '1px solid rgba(16,185,129,0.25)' }}>
-                  <CheckCircle size={20} /> All check-ins complete — great job!
+                  <CheckCircle size={20} /> All check-ins complete â€” great job!
                 </div>
               )}
 
@@ -790,7 +780,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
                   <button onClick={() => setShowOtherEvents(v => !v)}
                     className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs text-slate-400 hover:text-slate-300 transition-colors"
                     style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <span className="font-semibold">Log: Detention · Layover · TONU · Breakdown · Accident</span>
+                    <span className="font-semibold">Log: Detention Â· Layover Â· TONU Â· Breakdown Â· Accident</span>
                     <ChevronDown size={14} className={`transition-transform ${showOtherEvents ? 'rotate-180' : ''}`} />
                   </button>
                   {showOtherEvents && (
@@ -814,7 +804,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
             </div>
           )}
 
-          {/* ── Documents & Photos Tab ──────────────────────────────────── */}
+          {/* â”€â”€ Documents & Photos Tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           {activeTab === 'docs' && (
             <div className="px-5 py-5 space-y-5">
               {/* Rate Con */}
@@ -842,7 +832,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
                   </div>
                   <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Pickup Documents</span>
                   {!doneEvents.has('arrived_pickup') && (
-                    <span className="text-[10px] text-slate-600 italic">— Unlocks after "Arrived at Pickup"</span>
+                    <span className="text-[10px] text-slate-600 italic">â€” Unlocks after "Arrived at Pickup"</span>
                   )}
                 </div>
                 <div className="space-y-2">
@@ -864,7 +854,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
                   </div>
                   <span className="text-xs font-bold text-emerald-400 uppercase tracking-widest">Delivery Documents</span>
                   {!doneEvents.has('arrived_delivery') && (
-                    <span className="text-[10px] text-slate-600 italic">— Unlocks after "Arrived at Delivery"</span>
+                    <span className="text-[10px] text-slate-600 italic">â€” Unlocks after "Arrived at Delivery"</span>
                   )}
                 </div>
                 <div className="space-y-2">
@@ -885,7 +875,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
   );
 }
 
-// ─── Past Load Row ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Past Load Row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function PastLoadRow({ load }: { load: SonexLoad }) {
   return (
@@ -897,9 +887,9 @@ function PastLoadRow({ load }: { load: SonexLoad }) {
           <StatusBadge status={load.status} />
         </div>
         <div className="text-slate-300 text-xs truncate">
-          {load.pickupCity}, {load.pickupState} → {load.deliveryCity}, {load.deliveryState}
+          {load.pickupCity}, {load.pickupState} â†’ {load.deliveryCity}, {load.deliveryState}
         </div>
-        <div className="text-slate-500 text-xs mt-0.5">{fmtDate(load.pickupDate)} · {load.miles.toLocaleString()} mi</div>
+        <div className="text-slate-500 text-xs mt-0.5">{fmtDate(load.pickupDate)} Â· {load.miles.toLocaleString()} mi</div>
       </div>
       <div className="text-right flex-shrink-0">
         <div className="text-slate-400 text-xs">Gross: <span className="text-slate-300 font-mono">{fmt$(load.rate)}</span></div>
@@ -910,7 +900,7 @@ function PastLoadRow({ load }: { load: SonexLoad }) {
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function CarrierLoadsPage() {
   const { user } = useSonexAuth();
@@ -926,6 +916,7 @@ export default function CarrierLoadsPage() {
   const [carriers, setCarriers] = useState<SonexCarrier[]>([]);
   const [loads, setLoads] = useState<SonexLoad[]>([]);
   const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
 
   // Effective carrierId
   const carrierId = demoCarrierId || user?.carrierId || '';
@@ -938,9 +929,11 @@ export default function CarrierLoadsPage() {
   const refresh = useCallback(async () => {
     if (!carrierId) {
       setLoading(false);
+      setInitialLoading(false);
       return;
     }
-    setLoading(true);
+    const isFirst = loads.length === 0;
+    if (isFirst) setInitialLoading(true);
     try {
       const all = await getLoadsByCarrier(carrierId);
       all.sort((a, b) => {
@@ -955,10 +948,15 @@ export default function CarrierLoadsPage() {
       console.error(e);
     } finally {
       setLoading(false);
+      setInitialLoading(false);
     }
-  }, [carrierId]);
+  }, [carrierId, loads.length]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    refresh();
+    const interval = setInterval(refresh, 8000);
+    return () => clearInterval(interval);
+  }, [refresh]);
 
   const activeLoad = loads.find(l => ACTIVE_STATUSES.includes(l.status));
   const pastLoads = loads.filter(l => COMPLETED_STATUSES.includes(l.status));
@@ -984,11 +982,11 @@ export default function CarrierLoadsPage() {
         </a>
       </div>
 
-      {/* Demo Carrier Switcher — extremely helpful for testing */}
+      {/* Demo Carrier Switcher â€” extremely helpful for testing */}
       {carriers.length > 0 && (
         <div className="rounded-2xl p-4 flex flex-col gap-2.5" style={{ background: 'rgba(245,158,11,0.04)', border: '1px solid rgba(245,158,11,0.15)' }}>
           <div className="flex items-center justify-between">
-            <span className="text-amber-400 text-xs font-black uppercase tracking-wider">🔧 Developer Carrier Simulator</span>
+            <span className="text-amber-400 text-xs font-black uppercase tracking-wider">ðŸ”§ Developer Carrier Simulator</span>
             {carrierId && (
               <span className="text-[10px] text-slate-500">Currently viewing: {carriers.find(c => c.id === carrierId)?.firstName || 'Selected'}</span>
             )}
@@ -1020,7 +1018,7 @@ export default function CarrierLoadsPage() {
             This account is not linked to any carrier profile in the database. Please select a carrier from the simulator above to preview the portal features.
           </p>
         </div>
-      ) : loading ? (
+      ) : initialLoading ? (
         <div className="flex items-center justify-center py-16">
           <RefreshCw size={24} className="text-amber-500 animate-spin" />
         </div>
@@ -1054,3 +1052,5 @@ export default function CarrierLoadsPage() {
     </div>
   );
 }
+
+

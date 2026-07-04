@@ -1,6 +1,6 @@
-// ─── Sonex Dispatch Hub — Type Definitions ───────────────────────────────────
+﻿// â”€â”€â”€ Sonex Dispatch Hub â€” Type Definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-// ─── Enums ───────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Enums â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export type CarrierStatus = 'active' | 'inactive' | 'onboarding';
 
@@ -116,7 +116,7 @@ export interface SonexDocument {
   notes?: string;
 }
 
-// ─── Core Entities ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Core Entities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface SonexCarrier {
   id: string;
@@ -213,6 +213,10 @@ export interface SonexLoad {
   podUrl?: string;
   // Notes
   notes: string;
+  freeTimeMinutes: number;
+  detentionHours: number;
+  detentionRate: number;
+  detentionRevenue: number;
   // Meta
   createdAt: string;
   updatedAt: string;
@@ -237,18 +241,6 @@ export interface SonexCargoPhoto {
   uploadedBy: 'admin' | 'carrier';
 }
 
-export interface SonexMessage {
-  id: string;
-  carrierId: string;        // the conversation thread is per-carrier
-  senderId: string;         // 'admin' or carrier id
-  senderName: string;
-  senderRole: 'admin' | 'carrier';
-  messageText: string;
-  attachmentUrl?: string;
-  attachmentType?: 'image' | 'document';
-  read: boolean;
-  createdAt: string;
-}
 
 export interface SonexSettlement {
   id: string;
@@ -262,7 +254,7 @@ export interface SonexSettlement {
   generatedAt: string;
 }
 
-// ─── Auth ─────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface SonexUser {
   id: string;
@@ -273,7 +265,7 @@ export interface SonexUser {
   avatar: string;        // 2-letter initials
 }
 
-// ─── Settings ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface SonexAdminUser {
   id: string;
@@ -293,7 +285,7 @@ export interface SonexSettings {
   adminUsers: SonexAdminUser[];
 }
 
-// ─── Full Store Snapshot ──────────────────────────────────────────────────────
+// â”€â”€â”€ Full Store Snapshot â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface SonexStoreData {
   carriers: SonexCarrier[];
@@ -301,13 +293,12 @@ export interface SonexStoreData {
   checkins: SonexLoadCheckin[];
   cargoPhotos: SonexCargoPhoto[];
   documents: SonexDocument[];
-  messages: SonexMessage[];
   settlements: SonexSettlement[];
   settings: SonexSettings;
   initialized: boolean;
 }
 
-// ─── UI Helpers ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ UI Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const LOAD_STATUS_LABELS: Record<LoadStatus, string> = {
   booked: 'Booked',
@@ -345,7 +336,7 @@ export const INSURANCE_TYPE_LABELS: Record<InsuranceType, string> = {
 
 export const CHECKIN_EVENT_LABELS: Record<CheckinEvent, string> = {
   arrived_pickup:   'Arrived at Pickup',
-  loaded_departing: 'Loaded — Departing',
+  loaded_departing: 'Loaded â€” Departing',
   arrived_delivery: 'Arrived at Delivery',
   delivered:        'Delivered',
   detention_start:  'Detention Started',
@@ -356,3 +347,22 @@ export const CHECKIN_EVENT_LABELS: Record<CheckinEvent, string> = {
   breakdown:        'Breakdown Reported',
   accident:         'Accident Reported',
 };
+
+export function computeLoadFinancials(rate: number, miles: number, feePercent: number) {
+  const dispatchFeeAmount = Math.round(rate * (feePercent / 100) * 100) / 100;
+  const carrierNet = Math.round((rate - dispatchFeeAmount) * 100) / 100;
+  const ratePerMile = miles > 0 ? Math.round((rate / miles) * 100) / 100 : 0;
+  return { dispatchFeeAmount, carrierNet, ratePerMile };
+}
+
+export function computeDocStatus(expirationDate?: string): 'valid' | 'expiring_soon' | 'expired' | 'missing' {
+  if (!expirationDate) return 'valid';
+  const exp = new Date(expirationDate);
+  const now = new Date();
+  const daysUntil = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  if (daysUntil < 0) return 'expired';
+  if (daysUntil <= 30) return 'expiring_soon';
+  return 'valid';
+}
+
+

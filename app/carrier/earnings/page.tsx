@@ -6,6 +6,8 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
 import { useSonexAuth } from '@/lib/sonexAuth';
 import { getLoadsByCarrier, getSettlements } from '@/lib/sonexStore';
 import type { SonexLoad, SonexSettlement, LoadStatus } from '@/lib/sonexTypes';
@@ -124,27 +126,95 @@ function LoadRow({ load }: { load: SonexLoad }) {
 
 // ─── Settlement Row ───────────────────────────────────────────────────────────
 
-function SettlementRow({ s }: { s: SonexSettlement }) {
+function SettlementRow({ s, loads, carrierName }: { s: SonexSettlement; loads: SonexLoad[]; carrierName: string }) {
   function handleDownload() {
-    // Simple CSV export as fallback (jsPDF would need install)
-    const lines = [
-      'Settlement Report — Sonex Dispatch Hub',
-      `Period: ${s.periodStart} to ${s.periodEnd}`,
-      `Generated: ${new Date(s.generatedAt).toLocaleDateString()}`,
-      '',
-      `Gross Total: $${s.grossTotal.toFixed(2)}`,
-      `Dispatch Fees: $${s.feeTotal.toFixed(2)}`,
-      `Net Paid: $${s.netTotal.toFixed(2)}`,
-      `Loads: ${s.loadIds.length}`,
-    ];
-    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `settlement-${s.periodStart}-${s.periodEnd}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success('Settlement downloaded!');
+    try {
+      const doc = new jsPDF();
+      
+      // Header
+      doc.setFontSize(18);
+      doc.setTextColor(5, 11, 24);
+      doc.text('SONEX LOGISTICS LLC', 14, 20);
+      
+      doc.setFontSize(9);
+      doc.setTextColor(100, 100, 100);
+      doc.text('525 Randall Ave Ste 100', 14, 25);
+      doc.text('Cheyenne, WY 82001', 14, 30);
+      doc.text('dispatch@sonexlogistics.com | (346) 421-2681', 14, 35);
+      
+      // Title
+      doc.setFontSize(14);
+      doc.setTextColor(245, 158, 11);
+      doc.text('CARRIER SETTLEMENT STATEMENT', 14, 48);
+      
+      // Settlement Info
+      doc.setFontSize(10);
+      doc.setTextColor(50, 50, 50);
+      doc.text(`Carrier Name: ${carrierName}`, 14, 58);
+      doc.text(`Statement Period: ${s.periodStart} to ${s.periodEnd}`, 14, 63);
+      doc.text(`Statement Date: ${new Date(s.generatedAt).toLocaleDateString()}`, 14, 68);
+      doc.text(`Statement ID: ST-${s.id.slice(0, 8).toUpperCase()}`, 14, 73);
+      
+      // Table data
+      const tableBody = loads.map(l => [
+        l.loadNumber,
+        l.pickupDate,
+        `${l.pickupCity}, ${l.pickupState} -> ${l.deliveryCity}, ${l.deliveryState}`,
+        `$${l.rate.toFixed(2)}`,
+        `${l.dispatchFeePercent}%`,
+        `$${l.dispatchFeeAmount.toFixed(2)}`,
+        `$${l.carrierNet.toFixed(2)}`
+      ]);
+      
+      // Add totals row
+      tableBody.push([
+        'TOTALS',
+        '',
+        '',
+        `$${s.grossTotal.toFixed(2)}`,
+        '',
+        `$${s.feeTotal.toFixed(2)}`,
+        `$${s.netTotal.toFixed(2)}`
+      ]);
+      
+      (doc as any).autoTable({
+        startY: 80,
+        head: [['Load #', 'Date', 'Route', 'Gross Rate', 'Fee %', 'Fee Amount', 'Net Pay']],
+        body: tableBody,
+        theme: 'striped',
+        headStyles: { fillColor: [5, 11, 24], textColor: [255, 255, 255] },
+        footStyles: { fillColor: [240, 240, 240], fontStyle: 'bold' },
+        styles: { fontSize: 8 },
+        columnStyles: {
+          3: { halign: 'right' },
+          5: { halign: 'right' },
+          6: { halign: 'right' }
+        }
+      });
+      
+      doc.save(`settlement-${s.periodStart}-${s.periodEnd}.pdf`);
+      toast.success('✓ Settlement PDF downloaded!');
+    } catch (err) {
+      console.error('PDF generation failed, falling back to text:', err);
+      const lines = [
+        'Settlement Report — Sonex Dispatch Hub',
+        `Period: ${s.periodStart} to ${s.periodEnd}`,
+        `Generated: ${new Date(s.generatedAt).toLocaleDateString()}`,
+        '',
+        `Gross Total: $${s.grossTotal.toFixed(2)}`,
+        `Dispatch Fees: $${s.feeTotal.toFixed(2)}`,
+        `Net Paid: $${s.netTotal.toFixed(2)}`,
+        `Loads: ${s.loadIds.length}`,
+      ];
+      const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `settlement-${s.periodStart}-${s.periodEnd}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Settlement downloaded!');
+    }
   }
 
   return (
@@ -348,7 +418,14 @@ export default function CarrierEarningsPage() {
             <h2 className="text-base font-bold text-white">Settlement History</h2>
           </div>
           <div className="space-y-2">
-            {settlements.map(s => <SettlementRow key={s.id} s={s} />)}
+            {settlements.map(s => (
+              <SettlementRow 
+                key={s.id} 
+                s={s} 
+                loads={allCompleted.filter(l => s.loadIds.includes(l.id))}
+                carrierName={user?.displayName || 'Carrier'}
+              />
+            ))}
           </div>
         </div>
       )}

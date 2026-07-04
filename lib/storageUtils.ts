@@ -1,18 +1,12 @@
-// ─── Supabase Storage Upload Utility ─────────────────────────────────────────
-// Handles file uploads to Supabase Storage buckets
-// Buckets needed in Supabase Dashboard:
-//   - load-documents  (BOL, POD, Rate Con, Detention, Layover docs)
-//   - carrier-documents  (CDL, Med Card, Insurance, etc.)
-//   - message-attachments  (photos/docs sent in chat)
-//   - cargo-photos  (pickup/delivery photos)
-// All buckets: Public=true OR use signed URLs
+﻿// â”€â”€â”€ Cloudflare R2 Storage & CDN Utilities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Handles file uploads to Cloudflare R2 S3-compatible buckets with local static fallbacks.
+// Replaces Supabase Storage calls.
 
-import { supabase } from './supabaseClient';
+import { uploadFileAction, deleteFileFromStorage } from './storageActions';
 
 export type StorageBucket =
   | 'load-documents'
   | 'carrier-documents'
-  | 'message-attachments'
   | 'cargo-photos';
 
 export interface UploadResult {
@@ -32,7 +26,6 @@ export function compressImage(
   quality = 0.8,
 ): Promise<File | Blob> {
   return new Promise((resolve) => {
-    // Only compress images (exclude SVG, GIF, etc. if needed, but JPEG/PNG are primary targets)
     if (!file.type.startsWith('image/') || file.type.includes('svg') || file.type.includes('gif')) {
       resolve(file);
       return;
@@ -45,7 +38,6 @@ export function compressImage(
         let width = img.width;
         let height = img.height;
 
-        // Downscale maintaining aspect ratio
         if (width > maxW || height > maxH) {
           if (width > height) {
             height = Math.round((height * maxW) / width);
@@ -91,16 +83,14 @@ export function compressImage(
 }
 
 /**
- * Upload a file to Supabase Storage and return its public URL.
+ * Upload a file via Server Action and return its URL.
  * Automatically compresses image files client-side before uploading.
- * Falls back gracefully to base64 if Storage upload fails.
  */
 export async function uploadFile(
   file: File,
   bucket: StorageBucket,
   pathPrefix: string = '',
 ): Promise<UploadResult> {
-  // Compress images to save storage and user bandwidth
   let fileToUpload: File | Blob = file;
   if (file.type.startsWith('image/')) {
     try {
@@ -110,38 +100,16 @@ export async function uploadFile(
     }
   }
 
-  // Build a unique path
-  const ext = file.name.split('.').pop() || 'bin';
-  const timestamp = Date.now();
-  const rand = Math.random().toString(36).slice(2, 7);
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 40);
-  const path = pathPrefix
-    ? `${pathPrefix}/${timestamp}_${rand}_${safeName}`
-    : `${timestamp}_${rand}_${safeName}`;
+  const formData = new FormData();
+  formData.append('file', fileToUpload);
+  formData.append('bucket', bucket);
+  formData.append('pathPrefix', pathPrefix);
 
-  const { data, error } = await supabase.storage
-    .from(bucket)
-    .upload(path, fileToUpload, {
-      cacheControl: '3600',
-      upsert: false,
-    });
-
-  if (error) {
-    console.error(`Storage upload failed for bucket "${bucket}":`, error.message);
-    // Fallback: return base64 data URL (read the original file or compressed one)
-    const base64Url = await fileToBase64(file);
-    return { url: base64Url, path: '', bucket };
-  }
-
-  // Get public URL
-  const { data: urlData } = supabase.storage
-    .from(bucket)
-    .getPublicUrl(data.path);
-
+  const result = await uploadFileAction(formData);
   return {
-    url: urlData.publicUrl,
-    path: data.path,
-    bucket,
+    url: result.url,
+    path: result.path,
+    bucket: result.bucket as StorageBucket,
   };
 }
 
@@ -157,14 +125,11 @@ export async function uploadFiles(
 }
 
 /**
- * Delete a file from Supabase Storage by path
+ * Delete a file from Storage by path
  */
 export async function deleteFile(bucket: StorageBucket, path: string): Promise<void> {
-  if (!path) return; // base64 fallback — nothing to delete
-  const { error } = await supabase.storage.from(bucket).remove([path]);
-  if (error) {
-    console.error(`Storage delete failed for bucket "${bucket}" path "${path}":`, error.message);
-  }
+  if (!path) return;
+  await deleteFileFromStorage(path);
 }
 
 /**
@@ -180,25 +145,6 @@ export function fileToBase64(file: File): Promise<string> {
 }
 
 /**
- * Get a signed URL for private bucket access (60 min expiry)
- */
-export async function getSignedUrl(
-  bucket: StorageBucket,
-  path: string,
-  expiresInSeconds = 3600,
-): Promise<string | null> {
-  if (!path || path.startsWith('data:')) return path; // base64 fallback
-  const { data, error } = await supabase.storage
-    .from(bucket)
-    .createSignedUrl(path, expiresInSeconds);
-  if (error) {
-    console.error('Failed to create signed URL:', error.message);
-    return null;
-  }
-  return data.signedUrl;
-}
-
-/**
  * Format file size for display
  */
 export function formatFileSize(bytes: number): string {
@@ -208,8 +154,25 @@ export function formatFileSize(bytes: number): string {
 }
 
 /**
- * Check if a URL is a Supabase Storage URL (vs base64)
+ * Check if a URL is a remote Storage URL
  */
 export function isStorageUrl(url: string): boolean {
-  return url.startsWith('http') && url.includes('supabase');
+  return url.startsWith('http') && (url.includes('r2') || url.includes('cloudflarestorage') || url.includes('cdn'));
 }
+
+/**
+ * Maps a URL to its responsive CDN version with image resizing query parameters.
+ * If the image is loaded from our R2 bucket CDN worker, it appends the resizing query.
+ * For local uploads or base64, it returns the original URL unchanged.
+ */
+export function getResizedImageUrl(url: string, width = 800): string {
+  if (!url || url.startsWith('data:')) return url;
+  
+  if (url.startsWith('http')) {
+    const separator = url.includes('?') ? '&' : '?';
+    return `${url}${separator}width=${width}`;
+  }
+  
+  return url;
+}
+

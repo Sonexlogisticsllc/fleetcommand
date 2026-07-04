@@ -1,53 +1,24 @@
-'use client';
+﻿'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import {
-  ArrowRight, CheckCircle2, Clock, DollarSign, FileWarning, MessageSquare,
+  ArrowRight, CheckCircle2, Clock, DollarSign, FileWarning,
   Package, Percent, ReceiptText, Sun, Truck,
 } from 'lucide-react';
-import {
-  getAllMessages, getCarriers, getDashboardStats, getLoads, getTodayActivity,
-} from '@/lib/sonexStore';
+import { getDashboardCombinedData } from '@/lib/sonexStore';
+import { FuelPriceWidget } from '@/components/sonex/FuelPriceWidget';
 import type { SonexCarrier, SonexLoad } from '@/lib/sonexTypes';
 import { LOAD_STATUS_LABELS } from '@/lib/sonexTypes';
 
-const RevenueChart = dynamic(() => import('@/components/sonex/RevenueChart'), {
-  ssr: false,
-  loading: () => <div className="h-[200px] w-full animate-pulse rounded-xl bg-white/[0.03]" />,
-});
+import RevenueChart from '@/components/sonex/RevenueChart';
 
 function fmt$(n: number) {
   return '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 });
 }
 
-function buildWeeklyData(loads: SonexLoad[]) {
-  const weeks: { label: string; gross: number; fees: number }[] = [];
-  const now = new Date();
 
-  for (let i = 5; i >= 0; i--) {
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - now.getDay() + 1 - i * 7);
-    weekStart.setHours(0, 0, 0, 0);
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 6);
-    weekEnd.setHours(23, 59, 59, 999);
-
-    const weekLoads = loads.filter(load => {
-      const pickup = new Date(load.pickupDate);
-      return pickup >= weekStart && pickup <= weekEnd;
-    });
-
-    weeks.push({
-      label: weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      gross: Math.round(weekLoads.reduce((sum, load) => sum + load.rate, 0)),
-      fees: Math.round(weekLoads.reduce((sum, load) => sum + load.dispatchFeeAmount, 0)),
-    });
-  }
-
-  return weeks;
-}
 
 function statusColor(status: string) {
   const map: Record<string, string> = {
@@ -84,38 +55,42 @@ function KPICard({
 }
 
 export default function SonexDashboardPage() {
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<any>({
     activeCarriers: 0,
     loadsInProgress: 0,
     loadsCompletedThisWeek: 0,
     grossThisMonth: 0,
     feesThisMonth: 0,
   });
-  const [activity, setActivity] = useState<{ pickups: SonexLoad[]; deliveries: SonexLoad[] }>({ pickups: [], deliveries: [] });
-  const [carriers, setCarriers] = useState<SonexCarrier[]>([]);
+  const [activity, setActivity] = useState<{ pickups: (SonexLoad & { carrierName?: string })[]; deliveries: (SonexLoad & { carrierName?: string })[] }>({ pickups: [], deliveries: [] });
   const [weeklyData, setWeeklyData] = useState<{ label: string; gross: number; fees: number }[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [podNeeded, setPodNeeded] = useState(0);
   const [invoiceReady, setInvoiceReady] = useState(0);
 
-  useEffect(() => {
-    getLoads().then(loads => {
-      setWeeklyData(buildWeeklyData(loads));
-      setPodNeeded(loads.filter(load => load.status === 'delivered' && !load.podUrl).length);
-      setInvoiceReady(loads.filter(load => ['pod_received', 'invoiced', 'paid'].includes(load.status)).length);
+  const fetchData = () => {
+    getDashboardCombinedData().then((data: any) => {
+      setWeeklyData(data.weeklyData);
+      setPodNeeded(data.podNeeded);
+      setInvoiceReady(data.invoiceReady);
+      setStats(data.stats);
+      setActivity(data.activity);
+      setUnreadCount(data.unreadCount);
+    }).catch(err => {
+      console.warn('Dashboard data fetch failed:', err);
     });
-    getDashboardStats().then(setStats);
-    getTodayActivity().then(setActivity);
-    getCarriers().then(setCarriers);
-    getAllMessages().then(msgs => {
-      setUnreadCount(msgs.filter(message => !message.read && message.senderRole === 'carrier').length);
-    });
-  }, []);
+  };
 
-  const carrierMap = useMemo(
-    () => new Map(carriers.map(carrier => [carrier.id, `${carrier.firstName} ${carrier.lastName}`])),
-    [carriers],
-  );
+  useEffect(() => {
+    // Delay initial fetch slightly to let critical layout render settle first
+    const timer = setTimeout(fetchData, 200);
+    const interval = setInterval(fetchData, 30000);
+
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
+  }, []);
 
   const todayAll = [
     ...activity.pickups.map(load => ({ ...load, type: 'Pickup' })),
@@ -134,7 +109,7 @@ export default function SonexDashboardPage() {
             <h1 className="font-display text-xl font-extrabold text-white">Sonex Dispatch</h1>
             <p className="mt-0.5 text-sm text-slate-400">
               {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-              {' · '}
+              {' Â· '}
               {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
             </p>
           </div>
@@ -160,7 +135,7 @@ export default function SonexDashboardPage() {
                   {todayAll.length}
                 </span>
               </h2>
-              <Link href="/sonex/loads" className="flex items-center gap-1 text-xs text-amber-500 transition-colors hover:text-amber-400">
+              <Link href="/sonex/loads" prefetch={false} className="flex items-center gap-1 text-xs text-amber-500 transition-colors hover:text-amber-400">
                 View All <ArrowRight size={12} />
               </Link>
             </div>
@@ -181,11 +156,11 @@ export default function SonexDashboardPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/[0.04]">
-                    {todayAll.map(load => (
+                    {todayAll.slice(0, 20).map(load => (
                       <tr key={load.id} className="table-row-hover group">
                         <td className="py-3 pr-4 font-mono text-xs text-amber-400">{load.loadNumber}</td>
                         <td className="py-3 pr-4 text-xs text-slate-400">{load.type}</td>
-                        <td className="py-3 pr-4 text-xs text-slate-300">{carrierMap.get(load.carrierId) ?? '-'}</td>
+                        <td className="py-3 pr-4 text-xs text-slate-300">{load.carrierName ?? '-'}</td>
                         <td className="py-3 pr-4 text-xs text-slate-400">{load.pickupState} {'->'} {load.deliveryState}</td>
                         <td className="py-3 pr-4">
                           <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusColor(load.status)}`}>
@@ -223,9 +198,8 @@ export default function SonexDashboardPage() {
               {[
                 { href: '/sonex/loads', icon: FileWarning, label: 'Loads Needing POD', value: podNeeded },
                 { href: '/sonex/financials', icon: ReceiptText, label: 'Invoice / Settlement Loads', value: invoiceReady },
-                { href: '/sonex/messages', icon: MessageSquare, label: 'Unread Messages', value: unreadCount },
               ].map(({ href, icon: Icon, label, value }) => (
-                <Link key={label} href={href} className="flex items-center justify-between group">
+                <Link key={label} href={href} prefetch={false} className="flex items-center justify-between group">
                   <div className="flex items-center gap-2.5">
                     <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/15">
                       <Icon size={13} className="text-amber-400" />
@@ -244,9 +218,8 @@ export default function SonexDashboardPage() {
               {[
                 { href: '/sonex/load-log', icon: Package, label: 'Load Management', text: 'Master log, status, BOL/POD, cargo photos' },
                 { href: '/sonex/financials', icon: ReceiptText, label: 'Invoicing', text: 'Weekly fee invoices and carrier settlements' },
-                { href: '/sonex/messages', icon: MessageSquare, label: 'Messaging', text: 'Real-time admin and carrier conversations' },
               ].map(({ href, icon: Icon, label, text }) => (
-                <Link key={label} href={href} className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 transition-colors hover:border-amber-500/25 hover:bg-amber-500/[0.06]">
+                <Link key={label} href={href} prefetch={false} className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 transition-colors hover:border-amber-500/25 hover:bg-amber-500/[0.06]">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400">
                     <Icon size={16} />
                   </div>
@@ -258,8 +231,11 @@ export default function SonexDashboardPage() {
               ))}
             </div>
           </div>
+
+          <FuelPriceWidget />
         </div>
       </div>
     </div>
   );
 }
+

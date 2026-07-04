@@ -4,9 +4,10 @@ import React, { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
-  Truck, DollarSign, User, Bell, ChevronRight,
+  Truck, DollarSign, User, Bell, ChevronRight, LogOut,
 } from 'lucide-react';
 import { useSonexAuth } from '@/lib/sonexAuth';
+import { NotificationBell } from '@/components/sonex/NotificationBell';
 import { getCarrier } from '@/lib/sonexStore';
 import type { SonexCarrier } from '@/lib/sonexTypes';
 
@@ -29,9 +30,14 @@ function statusLabel(status: string) {
 }
 
 export default function CarrierLayout({ children }: { children: React.ReactNode }) {
-  const { user, isCarrier, isAuthenticated } = useSonexAuth();
+  const { user, isCarrier, isAuthenticated, logout } = useSonexAuth();
   const router = useRouter();
   const pathname = usePathname();
+
+  const handleLogout = () => {
+    logout();
+    router.push('/sonex/login');
+  };
   const [carrier, setCarrier] = useState<SonexCarrier | undefined>(undefined);
   useEffect(() => {
     if (!isAuthenticated || !isCarrier) {
@@ -76,9 +82,7 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
         {/* Carrier name + bell */}
         <div className="flex items-center gap-3">
           <span className="text-sm text-slate-300 font-medium truncate max-w-[140px]">{carrierName}</span>
-          <button className="relative w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/5 transition-colors">
-            <Bell size={18} className="text-slate-400" />
-          </button>
+          <NotificationBell role="carrier" carrierId={user?.carrierId} />
         </div>
       </header>
 
@@ -98,7 +102,7 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
               style={{ background: 'linear-gradient(135deg, #F59E0B, #FCD34D)' }}>
               {initials}
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="text-white text-sm font-semibold truncate">{carrierName}</div>
               {carrier && (
                 <div className={`text-xs font-medium ${statusColor(carrier.status)}`}>
@@ -106,6 +110,7 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
                 </div>
               )}
             </div>
+            <NotificationBell role="carrier" carrierId={user?.carrierId} />
           </div>
         </div>
 
@@ -130,6 +135,17 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
             );
           })}
         </nav>
+
+        {/* Sign Out */}
+        <div className="px-3 py-2 border-t border-white/5">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200 text-sm font-medium"
+          >
+            <LogOut size={16} className="shrink-0" />
+            <span>Sign Out</span>
+          </button>
+        </div>
 
         {/* Footer hint */}
         <div className="px-4 py-3 border-t border-white/5">

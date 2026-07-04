@@ -11,10 +11,10 @@ import toast from 'react-hot-toast';
 import { CheckinTimeline } from '@/components/sonex/CheckinTimeline';
 import { LoadStatusBadge, StatusPipeline } from '@/components/sonex/StatusPipeline';
 import {
-  addCheckin, computeLoadFinancials, getCarrier, getCarriers, getCheckins, getLoad,
+  addCheckin, getCarrier, getCarriers, getCheckins, getLoad,
   updateLoad,
 } from '@/lib/sonexStore';
-import type { CheckinEvent, LoadStatus, SonexCarrier, SonexLoad, SonexLoadCheckin } from '@/lib/sonexTypes';
+import { CheckinEvent, LoadStatus, SonexCarrier, SonexLoad, SonexLoadCheckin, computeLoadFinancials } from '@/lib/sonexTypes';
 import { uploadFile } from '@/lib/storageUtils';
 import {
   CHECKIN_EVENT_LABELS,
@@ -88,6 +88,8 @@ export default function LoadDetailPage() {
 
   useEffect(() => {
     reload();
+    const interval = setInterval(reload, 8000);
+    return () => clearInterval(interval);
   }, [loadId]);
   const loggedEvents = useMemo(() => new Set(checkins.map(c => c.event)), [checkins]);
   const financialPreview = useMemo(() => {
@@ -143,8 +145,9 @@ export default function LoadDetailPage() {
     try {
       const result = await uploadFile(file, 'load-documents', `${load.id}/${field}`);
       await patch({ [field]: result.url } as Partial<SonexLoad>, 'Document uploaded');
-    } catch (error) {
-      toast.error('Upload failed. Please try again.');
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      toast.error(`Upload failed: ${error?.message || error || 'Unknown error'}`);
     } finally {
       setUploadingField(null);
     }

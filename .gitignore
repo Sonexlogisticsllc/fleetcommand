@@ -34,3 +34,22 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+.vercel
+.env*
+
+# local database
+local.db
+
+# lighthouse audit and metrics
+lighthouse-report.json
+
+# dev server log outputs
+.next-dev-server.log
+.next-dev-server.err.log
+
+# scratch folder for performance/diagnostic scripts
+scratch/
+
+public/uploads/*
+!public/uploads/.gitkeep

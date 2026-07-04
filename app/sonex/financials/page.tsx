@@ -250,8 +250,8 @@ export default function FinancialsPage() {
   };
 
   // CSV Export
-  const handleExportCSV = () => {
-    const csv = exportLoadsCSV(filteredLoads, carriers);
+  const handleExportCSV = async () => {
+    const csv = await exportLoadsCSV(filteredLoads, carriers);
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

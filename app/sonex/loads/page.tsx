@@ -6,8 +6,8 @@ import {
   Package, Plus, Search, X, Check, ChevronRight, Filter,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { getLoads, getCarriers, addLoad, computeLoadFinancials } from '@/lib/sonexStore';
-import type { SonexLoad, SonexCarrier, LoadStatus, EquipmentType } from '@/lib/sonexTypes';
+import { getLoads, getCarriers, addLoad } from '@/lib/sonexStore';
+import { SonexLoad, SonexCarrier, LoadStatus, EquipmentType, computeLoadFinancials } from '@/lib/sonexTypes';
 import {
   LOAD_STATUS_LABELS, LOAD_STATUS_ORDER, EQUIPMENT_TYPE_LABELS,
 } from '@/lib/sonexTypes';

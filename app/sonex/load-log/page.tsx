@@ -94,10 +94,18 @@ export default function LoadLogPage() {
   const [sortCol, setSortCol] = useState<SortCol>('pickupDate');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 50;
+
   useEffect(() => {
     getCarriers().then(setCarriers);
     getLoads().then(setLoads);
   }, []);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, carrierFilter, pickupState, deliveryState, selectedStatuses, dateFrom, dateTo, sortCol, sortDir]);
 
   const carrierMap = useMemo(() => new Map(carriers.map(c => [c.id, c])), [carriers]);
 
@@ -172,12 +180,18 @@ export default function LoadLogPage() {
     });
   }, [filtered, sortCol, sortDir, carrierMap]);
 
+  // Paginated loads for layout optimization
+  const paginated = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return sorted.slice(start, start + pageSize);
+  }, [sorted, currentPage]);
+
   // Footer totals
   const totalRate = sorted.reduce((s, l) => s + l.rate, 0);
   const totalFees = sorted.reduce((s, l) => s + l.dispatchFeeAmount, 0);
 
-  const handleExportCSV = () => {
-    const csv = exportLoadsCSV(sorted, carriers);
+  const handleExportCSV = async () => {
+    const csv = await exportLoadsCSV(sorted, carriers);
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -330,7 +344,7 @@ export default function LoadLogPage() {
                     </div>
                   </td>
                 </tr>
-              ) : sorted.map(l => {
+              ) : paginated.map(l => {
                 const carrier = carrierMap.get(l.carrierId);
                 return (
                   <tr
@@ -424,6 +438,33 @@ export default function LoadLogPage() {
           </table>
         </div>
       </div>
+
+      {/* Pagination controls */}
+      {sorted.length > pageSize && (
+        <div className="flex items-center justify-between px-4 py-3 bg-white/[0.02] border border-white/[0.06] rounded-xl text-xs text-slate-400">
+          <div>
+            Showing <span className="font-semibold text-white">{(currentPage - 1) * pageSize + 1}</span> to{' '}
+            <span className="font-semibold text-white">{Math.min(currentPage * pageSize, sorted.length)}</span> of{' '}
+            <span className="font-semibold text-white">{sorted.length}</span> loads
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(Math.ceil(sorted.length / pageSize), p + 1))}
+              disabled={currentPage >= Math.ceil(sorted.length / pageSize)}
+              className="px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

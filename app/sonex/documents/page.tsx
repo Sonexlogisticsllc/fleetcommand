@@ -6,10 +6,10 @@ import {
   Eye, Clock, RefreshCw, Shield, Search, Filter,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { getCarriers, getDocuments, addDocument, computeDocStatus } from '@/lib/sonexStore';
+import { getCarriers, getDocuments, addDocument } from '@/lib/sonexStore';
 import { uploadFile } from '@/lib/storageUtils';
 import type { SonexCarrier, SonexDocument, DocType, DocStatus } from '@/lib/sonexTypes';
-import { ALL_DOC_TYPES, DOC_TYPE_LABELS, DOCS_WITH_EXPIRY } from '@/lib/sonexTypes';
+import { ALL_DOC_TYPES, DOC_TYPE_LABELS, DOCS_WITH_EXPIRY, computeDocStatus } from '@/lib/sonexTypes';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -85,8 +85,9 @@ function DocSlot({ carrierId, docType, document, onUploaded }: {
       await addDocument({ carrierId, docType, fileName: file.name, fileUrl: result.url, filePath: result.path, expirationDate, uploadedAt: new Date().toISOString(), uploadedBy: 'admin' });
       toast.success(`✓ ${DOC_TYPE_LABELS[docType]} uploaded`);
       onUploaded();
-    } catch {
-      toast.error('Upload failed');
+    } catch (e: any) {
+      console.error('Upload error:', e);
+      toast.error(`Upload failed: ${e?.message || e || 'Unknown error'}`);
     } finally {
       setUploading(false);
     }

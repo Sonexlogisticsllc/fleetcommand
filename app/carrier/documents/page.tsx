@@ -7,10 +7,10 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useSonexAuth } from '@/lib/sonexAuth';
-import { getDocuments, addDocument, computeDocStatus } from '@/lib/sonexStore';
+import { getDocuments, addDocument } from '@/lib/sonexStore';
 import { uploadFile } from '@/lib/storageUtils';
 import type { SonexDocument, DocType, DocStatus } from '@/lib/sonexTypes';
-import { ALL_DOC_TYPES, DOC_TYPE_LABELS, DOCS_WITH_EXPIRY } from '@/lib/sonexTypes';
+import { ALL_DOC_TYPES, DOC_TYPE_LABELS, DOCS_WITH_EXPIRY, computeDocStatus } from '@/lib/sonexTypes';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -250,8 +250,9 @@ export default function CarrierDocumentsPage() {
         style: { background: '#0D1F3C', color: '#FCD34D', border: '1px solid rgba(245,158,11,0.3)' },
       });
       await refresh();
-    } catch {
-      toast.error('Upload failed. Please check your connection and try again.');
+    } catch (e: any) {
+      console.error('Upload error:', e);
+      toast.error(`Upload failed: ${e?.message || e || 'Unknown error'}`);
     }
   }
 

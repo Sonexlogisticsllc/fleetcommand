@@ -1,10 +1,9 @@
-// ─── Sonex Dispatch Hub — Rich Mock Data ─────────────────────────────────────
+﻿// â”€â”€â”€ Sonex Dispatch Hub â€” Rich Mock Data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import type {
-  SonexCarrier, SonexLoad, SonexLoadCheckin, SonexCargoPhoto,
-  SonexMessage, SonexSettlement, SonexSettings,
+  SonexCarrier, SonexLoad, SonexLoadCheckin, SonexCargoPhoto, SonexSettlement, SonexSettings,
 } from './sonexTypes';
 
-// ─── Settings ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const DEFAULT_SETTINGS: SonexSettings = {
   companyName: 'Sonex Logistics LLC',
@@ -20,7 +19,7 @@ export const DEFAULT_SETTINGS: SonexSettings = {
   ],
 };
 
-// ─── Carriers ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Carriers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const MOCK_CARRIERS: SonexCarrier[] = [
   {
@@ -56,7 +55,7 @@ export const MOCK_CARRIERS: SonexCarrier[] = [
     insurancePolicyNumber: 'ORI-2024-88291',
     dispatchFeePercent: 10,
     status: 'active',
-    notes: 'Prefers no Northeast runs. Pays insurance weekly. Excellent communicator — always checks in on time. Available M-F, sometimes weekends for good rates.',
+    notes: 'Prefers no Northeast runs. Pays insurance weekly. Excellent communicator â€” always checks in on time. Available M-F, sometimes weekends for good rates.',
     portalEmail: 'marcus@carrier.sonex',
     joinedAt: '2024-09-15T10:00:00Z',
     updatedAt: '2025-06-20T14:30:00Z',
@@ -95,7 +94,7 @@ export const MOCK_CARRIERS: SonexCarrier[] = [
     insurancePolicyNumber: 'PRG-HS-2024-77234',
     dispatchFeePercent: 10,
     status: 'active',
-    notes: 'Hotshot specialist — great for time-sensitive LTL and partial loads. Strong in TX, OK, LA triangle. Medical card renewal coming up in 60 days.',
+    notes: 'Hotshot specialist â€” great for time-sensitive LTL and partial loads. Strong in TX, OK, LA triangle. Medical card renewal coming up in 60 days.',
     portalEmail: 'dchen@carrier.sonex',
     joinedAt: '2024-11-02T08:00:00Z',
     updatedAt: '2025-06-18T11:00:00Z',
@@ -128,7 +127,7 @@ export const MOCK_CARRIERS: SonexCarrier[] = [
     insurancePolicyNumber: 'NW-COM-2024-44521',
     dispatchFeePercent: 8,
     status: 'active',
-    notes: 'Excellent driver. Works primarily Midwest and Great Lakes region. 8% rate agreed — she has low overhead. Never misses a delivery window.',
+    notes: 'Excellent driver. Works primarily Midwest and Great Lakes region. 8% rate agreed â€” she has low overhead. Never misses a delivery window.',
     portalEmail: 'priya@carrier.sonex',
     joinedAt: '2025-01-10T09:00:00Z',
     updatedAt: '2025-06-22T16:00:00Z',
@@ -167,7 +166,7 @@ export const MOCK_CARRIERS: SonexCarrier[] = [
     insurancePolicyNumber: 'CAN-2024-98123',
     dispatchFeePercent: 10,
     status: 'onboarding',
-    notes: 'New carrier — onboarding in progress. Still waiting on signed dispatch agreement and updated COI. Strong SW and West Coast routes. Spoke by phone — reliable guy.',
+    notes: 'New carrier â€” onboarding in progress. Still waiting on signed dispatch agreement and updated COI. Strong SW and West Coast routes. Spoke by phone â€” reliable guy.',
     portalEmail: 'roberto@carrier.sonex',
     joinedAt: '2025-06-15T12:00:00Z',
     updatedAt: '2025-06-28T09:00:00Z',
@@ -205,14 +204,14 @@ export const MOCK_CARRIERS: SonexCarrier[] = [
     insurancePolicyNumber: 'GWC-2023-55412',
     dispatchFeePercent: 10,
     status: 'inactive',
-    notes: 'Went inactive June 2025 — moved to company driving job. May return to owner-op in Q4 2025. Keep on file.',
+    notes: 'Went inactive June 2025 â€” moved to company driving job. May return to owner-op in Q4 2025. Keep on file.',
     portalEmail: 'sarah@carrier.sonex',
     joinedAt: '2024-07-20T10:00:00Z',
     updatedAt: '2025-06-01T08:00:00Z',
   },
 ];
 
-// ─── Helper: compute financials ───────────────────────────────────────────────
+// â”€â”€â”€ Helper: compute financials â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function calcLoad(rate: number, miles: number, feePercent: number) {
   const dispatchFeeAmount = Math.round(rate * (feePercent / 100) * 100) / 100;
@@ -221,7 +220,7 @@ function calcLoad(rate: number, miles: number, feePercent: number) {
   return { dispatchFeeAmount, carrierNet, ratePerMile };
 }
 
-// ─── Loads ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Loads â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function makeLoad(
   id: string, num: string, carrierId: string, override: Partial<SonexLoad> & {
@@ -259,6 +258,10 @@ function makeLoad(
     carrierNet,
     ratePerMile,
     notes: '',
+    freeTimeMinutes: 120,
+    detentionHours: 0,
+    detentionRate: 50,
+    detentionRevenue: 0,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     ...override,
@@ -266,7 +269,7 @@ function makeLoad(
 }
 
 export const MOCK_LOADS: SonexLoad[] = [
-  // ── Marcus Johnson (flatbed) ──────────────────────────────────────────────
+  // â”€â”€ Marcus Johnson (flatbed) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   makeLoad('load-001', 'SNX-2025-001', 'carrier-1', {
     brokerName: 'Coyote Logistics',
     brokerContact: 'Jake Morrison',
@@ -296,7 +299,7 @@ export const MOCK_LOADS: SonexLoad[] = [
     pickupAddress: '1401 County Rd 21',
     pickupCity: 'Decatur', pickupState: 'AL', pickupZip: '35601',
     pickupDate: '2025-06-26', pickupTime: '06:00',
-    deliveryFacility: 'Ford Motor — Chicago Assembly',
+    deliveryFacility: 'Ford Motor â€” Chicago Assembly',
     deliveryAddress: '12600 S Torrence Ave',
     deliveryCity: 'Chicago', deliveryState: 'IL', deliveryZip: '60633',
     deliveryDate: '2025-06-27', deliveryTime: '09:00',
@@ -311,7 +314,7 @@ export const MOCK_LOADS: SonexLoad[] = [
     brokerName: 'CH Robinson',
     brokerContact: 'Mike Hartley',
     brokerPhone: '(800) 323-7587',
-    pickupFacility: 'Vulcan Materials — Dallas Plant',
+    pickupFacility: 'Vulcan Materials â€” Dallas Plant',
     pickupAddress: '5000 Lyndon B Johnson Fwy',
     pickupCity: 'Dallas', pickupState: 'TX', pickupZip: '75244',
     pickupDate: '2025-06-29', pickupTime: '08:30',
@@ -327,12 +330,12 @@ export const MOCK_LOADS: SonexLoad[] = [
     updatedAt: '2025-06-29T09:00:00Z',
   }),
 
-  // ── David Chen (hotshot) ──────────────────────────────────────────────────
+  // â”€â”€ David Chen (hotshot) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   makeLoad('load-004', 'SNX-2025-004', 'carrier-2', {
     brokerName: 'Transplace',
     brokerContact: 'Ashley Park',
     brokerPhone: '(888) 445-1560',
-    pickupFacility: 'Baker Hughes — Midland Yard',
+    pickupFacility: 'Baker Hughes â€” Midland Yard',
     pickupAddress: '1000 S Garfield Ave',
     pickupCity: 'Midland', pickupState: 'TX', pickupZip: '79705',
     pickupDate: '2025-06-22', pickupTime: '10:00',
@@ -351,11 +354,11 @@ export const MOCK_LOADS: SonexLoad[] = [
     brokerName: 'GlobalTranz',
     brokerContact: 'Tom Bradley',
     brokerPhone: '(877) 884-9767',
-    pickupFacility: 'Halliburton — Houston Campus',
+    pickupFacility: 'Halliburton â€” Houston Campus',
     pickupAddress: '3000 N Sam Houston Pkwy E',
     pickupCity: 'Houston', pickupState: 'TX', pickupZip: '77032',
     pickupDate: '2025-06-25', pickupTime: '07:00',
-    deliveryFacility: 'Chesapeake Energy — Oklahoma City',
+    deliveryFacility: 'Chesapeake Energy â€” Oklahoma City',
     deliveryAddress: '6100 N Western Ave',
     deliveryCity: 'Oklahoma City', deliveryState: 'OK', deliveryZip: '73118',
     deliveryDate: '2025-06-26', deliveryTime: '11:00',
@@ -370,11 +373,11 @@ export const MOCK_LOADS: SonexLoad[] = [
     brokerName: 'TQL (Total Quality Logistics)',
     brokerContact: 'Samantha Reed',
     brokerPhone: '(800) 580-3101',
-    pickupFacility: 'NOV — Tulsa Distribution',
+    pickupFacility: 'NOV â€” Tulsa Distribution',
     pickupAddress: '7909 E 21st St',
     pickupCity: 'Tulsa', pickupState: 'OK', pickupZip: '74129',
     pickupDate: '2025-06-29', pickupTime: '09:00',
-    deliveryFacility: 'Denbury Resources — Tyler',
+    deliveryFacility: 'Denbury Resources â€” Tyler',
     deliveryAddress: '5300 W Grande Blvd',
     deliveryCity: 'Tyler', deliveryState: 'TX', deliveryZip: '75703',
     deliveryDate: '2025-06-30', deliveryTime: '14:00',
@@ -386,17 +389,17 @@ export const MOCK_LOADS: SonexLoad[] = [
     updatedAt: '2025-06-29T07:00:00Z',
   }),
 
-  // ── Priya Patel (box truck) ───────────────────────────────────────────────
+  // â”€â”€ Priya Patel (box truck) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   makeLoad('load-007', 'SNX-2025-007', 'carrier-3', {
     feePercent: 8,
     brokerName: 'Arrive Logistics',
     brokerContact: 'Kevin Walsh',
     brokerPhone: '(888) 861-0650',
-    pickupFacility: 'Amazon Fulfillment — Joliet',
+    pickupFacility: 'Amazon Fulfillment â€” Joliet',
     pickupAddress: '1050 Remington Blvd',
     pickupCity: 'Romeoville', pickupState: 'IL', pickupZip: '60446',
     pickupDate: '2025-06-24', pickupTime: '06:00',
-    deliveryFacility: 'Amazon Sort Center — Detroit',
+    deliveryFacility: 'Amazon Sort Center â€” Detroit',
     deliveryAddress: '47849 Fremont Blvd',
     deliveryCity: 'Fremont', deliveryState: 'MI', deliveryZip: '48447',
     deliveryDate: '2025-06-24', deliveryTime: '16:00',
@@ -412,7 +415,7 @@ export const MOCK_LOADS: SonexLoad[] = [
     brokerName: 'RXO (formerly XPO Logistics)',
     brokerContact: 'Diana Flores',
     brokerPhone: '(855) 796-9669',
-    pickupFacility: 'Illinois Tool Works — Glenview',
+    pickupFacility: 'Illinois Tool Works â€” Glenview',
     pickupAddress: '155 Harlem Ave',
     pickupCity: 'Glenview', pickupState: 'IL', pickupZip: '60025',
     pickupDate: '2025-06-27', pickupTime: '08:00',
@@ -432,11 +435,11 @@ export const MOCK_LOADS: SonexLoad[] = [
     brokerName: 'Mode Transportation',
     brokerContact: 'Brian Kim',
     brokerPhone: '(972) 383-5600',
-    pickupFacility: 'Grainger — Janesville DC',
+    pickupFacility: 'Grainger â€” Janesville DC',
     pickupAddress: '4900 E Centerway St',
     pickupCity: 'Janesville', pickupState: 'WI', pickupZip: '53546',
     pickupDate: '2025-06-29', pickupTime: '07:00',
-    deliveryFacility: 'Grainger — Columbus Branch',
+    deliveryFacility: 'Grainger â€” Columbus Branch',
     deliveryAddress: '1000 Polaris Pkwy',
     deliveryCity: 'Columbus', deliveryState: 'OH', deliveryZip: '43240',
     deliveryDate: '2025-06-30', deliveryTime: '12:00',
@@ -448,16 +451,16 @@ export const MOCK_LOADS: SonexLoad[] = [
     updatedAt: '2025-06-28T12:00:00Z',
   }),
 
-  // ── Sarah Williams — historical paid loads ────────────────────────────────
+  // â”€â”€ Sarah Williams â€” historical paid loads â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   makeLoad('load-010', 'SNX-2025-010', 'carrier-5', {
     brokerName: 'Coyote Logistics',
     brokerContact: 'James Wu',
     brokerPhone: '(800) 225-9838',
-    pickupFacility: 'Procter & Gamble — Atlanta DC',
+    pickupFacility: 'Procter & Gamble â€” Atlanta DC',
     pickupAddress: '3200 Campus Dr',
     pickupCity: 'Norcross', pickupState: 'GA', pickupZip: '30071',
     pickupDate: '2025-05-12', pickupTime: '07:00',
-    deliveryFacility: 'Walmart DC — Shelby NC',
+    deliveryFacility: 'Walmart DC â€” Shelby NC',
     deliveryAddress: '2440 Airport Rd',
     deliveryCity: 'Shelby', deliveryState: 'NC', deliveryZip: '28150',
     deliveryDate: '2025-05-13', deliveryTime: '10:00',
@@ -472,11 +475,11 @@ export const MOCK_LOADS: SonexLoad[] = [
     brokerName: 'Echo Global Logistics',
     brokerContact: 'Lisa Chang',
     brokerPhone: '(800) 354-7993',
-    pickupFacility: 'Kimberly-Clark — Roswell Warehouse',
+    pickupFacility: 'Kimberly-Clark â€” Roswell Warehouse',
     pickupAddress: '1 Kimberly Dr',
     pickupCity: 'Roswell', pickupState: 'GA', pickupZip: '30076',
     pickupDate: '2025-05-20', pickupTime: '09:00',
-    deliveryFacility: 'Target DC — Greensboro',
+    deliveryFacility: 'Target DC â€” Greensboro',
     deliveryAddress: '2100 Summit Ave',
     deliveryCity: 'Greensboro', deliveryState: 'NC', deliveryZip: '27405',
     deliveryDate: '2025-05-21', deliveryTime: '13:00',
@@ -488,16 +491,16 @@ export const MOCK_LOADS: SonexLoad[] = [
     updatedAt: '2025-05-22T15:00:00Z',
   }),
 
-  // ── More loads for Marcus (to fill financials) ────────────────────────────
+  // â”€â”€ More loads for Marcus (to fill financials) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   makeLoad('load-012', 'SNX-2025-012', 'carrier-1', {
     brokerName: 'CH Robinson',
     brokerContact: 'Mike Hartley',
     brokerPhone: '(800) 323-7587',
-    pickupFacility: 'US Steel — Gary Works',
+    pickupFacility: 'US Steel â€” Gary Works',
     pickupAddress: '1 North Broadway',
     pickupCity: 'Gary', pickupState: 'IN', pickupZip: '46402',
     pickupDate: '2025-06-16', pickupTime: '06:00',
-    deliveryFacility: 'Commercial Metals — Birmingham',
+    deliveryFacility: 'Commercial Metals â€” Birmingham',
     deliveryAddress: '3800 4th Ave S',
     deliveryCity: 'Birmingham', deliveryState: 'AL', deliveryZip: '35222',
     deliveryDate: '2025-06-17', deliveryTime: '11:00',
@@ -512,11 +515,11 @@ export const MOCK_LOADS: SonexLoad[] = [
     brokerName: 'Worldwide Express',
     brokerContact: 'Derek Stevens',
     brokerPhone: '(888) 960-2121',
-    pickupFacility: 'CEMEX — San Antonio Plant',
+    pickupFacility: 'CEMEX â€” San Antonio Plant',
     pickupAddress: '8400 Potranco Rd',
     pickupCity: 'San Antonio', pickupState: 'TX', pickupZip: '78251',
     pickupDate: '2025-06-19', pickupTime: '07:30',
-    deliveryFacility: 'Construction Site — Austin Expansion',
+    deliveryFacility: 'Construction Site â€” Austin Expansion',
     deliveryAddress: '5600 Manor Rd',
     deliveryCity: 'Austin', deliveryState: 'TX', deliveryZip: '78723',
     deliveryDate: '2025-06-19', deliveryTime: '14:00',
@@ -531,11 +534,11 @@ export const MOCK_LOADS: SonexLoad[] = [
     brokerName: 'Transplace',
     brokerContact: 'Ashley Park',
     brokerPhone: '(888) 445-1560',
-    pickupFacility: 'National Oilwell Varco — Houston',
+    pickupFacility: 'National Oilwell Varco â€” Houston',
     pickupAddress: '10353 Richmond Ave',
     pickupCity: 'Houston', pickupState: 'TX', pickupZip: '77042',
     pickupDate: '2025-06-10', pickupTime: '08:00',
-    deliveryFacility: 'Callon Petroleum — Midland',
+    deliveryFacility: 'Callon Petroleum â€” Midland',
     deliveryAddress: '200 N Colorado St',
     deliveryCity: 'Midland', deliveryState: 'TX', deliveryZip: '79701',
     deliveryDate: '2025-06-10', deliveryTime: '16:00',
@@ -551,11 +554,11 @@ export const MOCK_LOADS: SonexLoad[] = [
     brokerName: 'RXO',
     brokerContact: 'Diana Flores',
     brokerPhone: '(855) 796-9669',
-    pickupFacility: 'Abbott Labs — Waukegan',
+    pickupFacility: 'Abbott Labs â€” Waukegan',
     pickupAddress: '200 Abbott Park Rd',
     pickupCity: 'Waukegan', pickupState: 'IL', pickupZip: '60064',
     pickupDate: '2025-06-13', pickupTime: '09:00',
-    deliveryFacility: 'Henry Ford Hospital — Detroit',
+    deliveryFacility: 'Henry Ford Hospital â€” Detroit',
     deliveryAddress: '2799 W Grand Blvd',
     deliveryCity: 'Detroit', deliveryState: 'MI', deliveryZip: '48202',
     deliveryDate: '2025-06-13', deliveryTime: '15:00',
@@ -568,11 +571,11 @@ export const MOCK_LOADS: SonexLoad[] = [
   }),
 ];
 
-// ─── Load Check-ins ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Load Check-ins â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const MOCK_CHECKINS: SonexLoadCheckin[] = [
   { id: 'ci-1', loadId: 'load-003', event: 'arrived_pickup', timestamp: '2025-06-29T09:15:00Z', notes: '', loggedBy: 'carrier' },
-  { id: 'ci-2', loadId: 'load-003', event: 'loaded_departing', timestamp: '2025-06-29T11:30:00Z', notes: 'Loaded 42,000 lbs limestone — tarped and strapped.', loggedBy: 'carrier' },
+  { id: 'ci-2', loadId: 'load-003', event: 'loaded_departing', timestamp: '2025-06-29T11:30:00Z', notes: 'Loaded 42,000 lbs limestone â€” tarped and strapped.', loggedBy: 'carrier' },
   { id: 'ci-3', loadId: 'load-006', event: 'arrived_pickup', timestamp: '2025-06-29T09:05:00Z', notes: '', loggedBy: 'carrier' },
   { id: 'ci-4', loadId: 'load-008', event: 'arrived_pickup', timestamp: '2025-06-27T08:20:00Z', notes: '', loggedBy: 'carrier' },
   { id: 'ci-5', loadId: 'load-008', event: 'loaded_departing', timestamp: '2025-06-27T10:00:00Z', notes: '', loggedBy: 'carrier' },
@@ -580,32 +583,8 @@ export const MOCK_CHECKINS: SonexLoadCheckin[] = [
   { id: 'ci-7', loadId: 'load-008', event: 'delivered', timestamp: '2025-06-27T16:30:00Z', notes: 'Receiver signed. No damage.', loggedBy: 'carrier' },
 ];
 
-// Messages ─────────────────────────────────────────────────────────────────
 
-export const MOCK_MESSAGES: SonexMessage[] = [
-  // Marcus Johnson thread
-  { id: 'msg-1', carrierId: 'carrier-1', senderId: 'admin', senderName: 'Sonex Dispatch', senderRole: 'admin', messageText: "Hey Marcus, load SNX-2025-003 is confirmed — picking up in Dallas tomorrow at 8:30am. Rate con is attached in the load details. Let me know once you're loaded.", read: true, createdAt: '2025-06-28T07:10:00Z' },
-  { id: 'msg-2', carrierId: 'carrier-1', senderId: 'carrier-1', senderName: 'Marcus Johnson', senderRole: 'carrier', messageText: "Got it, I'll be there. Any special notes from the shipper on tarping requirements?", read: true, createdAt: '2025-06-28T08:45:00Z' },
-  { id: 'msg-3', carrierId: 'carrier-1', senderId: 'admin', senderName: 'Sonex Dispatch', senderRole: 'admin', messageText: "Standard flatbed — 2 tarp required, no open edges. Vulcan will have strapping on site but bring your own as backup. Scale is about 2 miles east on Lyndon Johnson Fwy.", read: true, createdAt: '2025-06-28T09:00:00Z' },
-  { id: 'msg-4', carrierId: 'carrier-1', senderId: 'carrier-1', senderName: 'Marcus Johnson', senderRole: 'carrier', messageText: "Perfect. Also quick heads up — my COI renewal should be hitting your email from Old Republic in the next day or two. They said they sent it out.", read: false, createdAt: '2025-06-29T07:30:00Z' },
-
-  // David Chen thread
-  { id: 'msg-5', carrierId: 'carrier-2', senderId: 'admin', senderName: 'Sonex Dispatch', senderRole: 'admin', messageText: "David — SNX-2025-006 is dispatched. Pickup at NOV Tulsa yard at 9am. Contact is the yard manager, ask for Bay 4. They're usually quick.", read: true, createdAt: '2025-06-29T07:00:00Z' },
-  { id: 'msg-6', carrierId: 'carrier-2', senderId: 'carrier-2', senderName: 'David Chen', senderRole: 'carrier', messageText: "On my way now, about 30 min out. Will check in when I arrive.", read: true, createdAt: '2025-06-29T08:30:00Z' },
-  { id: 'msg-7', carrierId: 'carrier-2', senderId: 'carrier-2', senderName: 'David Chen', senderRole: 'carrier', messageText: "Arrived at pickup. Dock is backed up — looks like maybe 45 min wait.", read: false, createdAt: '2025-06-29T09:05:00Z' },
-
-  // Priya Patel thread
-  { id: 'msg-8', carrierId: 'carrier-3', senderId: 'admin', senderName: 'Sonex Dispatch', senderRole: 'admin', messageText: "Priya, I have a Janesville to Columbus run on the 29th — MRO supplies, 10,500 lbs, $920. Pickup at 7am. Interested?", read: true, createdAt: '2025-06-28T14:00:00Z' },
-  { id: 'msg-9', carrierId: 'carrier-3', senderId: 'carrier-3', senderName: 'Priya Patel', senderRole: 'carrier', messageText: "Yes! That works perfectly, I'm repositioning through Wisconsin anyway. Send me the rate con when you have it.", read: true, createdAt: '2025-06-28T14:30:00Z' },
-  { id: 'msg-10', carrierId: 'carrier-3', senderId: 'admin', senderName: 'Sonex Dispatch', senderRole: 'admin', messageText: "Done — load SNX-2025-009 is booked in the system. Rate con will be emailed from Mode Transportation. Great catch on the timing!", read: true, createdAt: '2025-06-28T15:00:00Z' },
-
-  // Roberto Vasquez thread
-  { id: 'msg-11', carrierId: 'carrier-4', senderId: 'admin', senderName: 'Sonex Dispatch', senderRole: 'admin', messageText: "Hey Roberto, welcome to Sonex! Still waiting on your COI, W-9, and signed dispatch agreement before we can put you on loads. Can you get those over this week?", read: true, createdAt: '2025-06-25T10:00:00Z' },
-  { id: 'msg-12', carrierId: 'carrier-4', senderId: 'carrier-4', senderName: 'Roberto Vasquez', senderRole: 'carrier', messageText: "Hi! Yes, my insurance agent is sending the COI today. I'll sign the dispatch agreement tonight and email it back. W9 I'll fill out and send tomorrow.", read: true, createdAt: '2025-06-25T11:30:00Z' },
-  { id: 'msg-13', carrierId: 'carrier-4', senderId: 'admin', senderName: 'Sonex Dispatch', senderRole: 'admin', messageText: "Perfect — once I have all three, I'll get you set up in the portal and we can start talking about lanes. I have some good AZ to CA runs that might work for you.", read: false, createdAt: '2025-06-25T12:00:00Z' },
-];
-
-// ─── Settlements ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Settlements â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const MOCK_SETTLEMENTS: SonexSettlement[] = [
   {
@@ -642,3 +621,4 @@ export const MOCK_SETTLEMENTS: SonexSettlement[] = [
     generatedAt: '2025-06-16T11:00:00Z',
   },
 ];
+
