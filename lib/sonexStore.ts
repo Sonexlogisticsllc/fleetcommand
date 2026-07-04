@@ -312,7 +312,7 @@ export async function addLoad(
     await db.insert(schema.loads).values({
       id,
       loadNumber,
-      carrierId: data.carrierId,
+      carrierId: data.carrierId || null,
       brokerName: data.brokerName,
       brokerContact: data.brokerContact,
       brokerPhone: data.brokerPhone,
@@ -409,7 +409,7 @@ export async function updateLoad(id: string, data: Partial<SonexLoad>): Promise<
     }
 
     const updateData: any = {
-      carrierId: updated.carrierId,
+      carrierId: updated.carrierId || null,
       brokerName: updated.brokerName,
       brokerContact: updated.brokerContact,
       brokerPhone: updated.brokerPhone,

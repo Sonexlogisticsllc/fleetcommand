@@ -1,12 +1,14 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Package, Plus, Search, X, Check, ChevronRight, Filter,
+  Sparkles, UploadCloud, Loader2, User, Clock, ArrowRight,
+  Activity, FileText, AlertTriangle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { getLoads, getCarriers, addLoad } from '@/lib/sonexStore';
+import { getLoads, getCarriers, addLoad, updateLoad } from '@/lib/sonexStore';
 import { SonexLoad, SonexCarrier, LoadStatus, EquipmentType, computeLoadFinancials } from '@/lib/sonexTypes';
 import {
   LOAD_STATUS_LABELS, LOAD_STATUS_ORDER, EQUIPMENT_TYPE_LABELS,
@@ -49,7 +51,7 @@ interface NewLoadModalProps {
 
 function NewLoadModal({ carriers, onClose, onSaved }: NewLoadModalProps) {
   const [form, setForm] = useState({
-    carrierId: carriers[0]?.id ?? '',
+    carrierId: '', // Default to unassigned
     // Broker
     brokerName: '', brokerContact: '', brokerPhone: '', brokerEmail: '', brokerMC: '',
     // Pickup
@@ -74,8 +76,8 @@ function NewLoadModal({ carriers, onClose, onSaved }: NewLoadModalProps) {
   const set = (k: string, v: unknown) => setForm(f => ({ ...f, [k]: v }));
 
   const handleSave = async () => {
-    if (!form.carrierId || !form.pickupDate || !form.deliveryDate || !form.rate) {
-      toast.error('Please fill in required fields: carrier, dates, and rate.');
+    if (!form.pickupDate || !form.deliveryDate || !form.rate) {
+      toast.error('Please fill in required fields: dates and rate.');
       return;
     }
     await addLoad({
@@ -85,7 +87,7 @@ function NewLoadModal({ carriers, onClose, onSaved }: NewLoadModalProps) {
       bolUrl: undefined,
       podUrl: undefined,
     });
-    toast.success('Load created!');
+    toast.success('Load created successfully!');
     onSaved();
     onClose();
   };
@@ -105,7 +107,6 @@ function NewLoadModal({ carriers, onClose, onSaved }: NewLoadModalProps) {
     </div>
   );
 
-
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
@@ -114,7 +115,7 @@ function NewLoadModal({ carriers, onClose, onSaved }: NewLoadModalProps) {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06] shrink-0">
           <h3 className="text-base font-bold text-white flex items-center gap-2">
-            <Plus size={16} className="text-amber-400" /> New Load
+            <Plus size={16} className="text-amber-400" /> Create New Order
           </h3>
           <button onClick={onClose} className="p-2 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors">
             <X size={18} />
@@ -123,16 +124,17 @@ function NewLoadModal({ carriers, onClose, onSaved }: NewLoadModalProps) {
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-          {/* Carrier */}
+          {/* Carrier Assignment Select */}
           <div>
             <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-              Carrier <span className="text-amber-500">*</span>
+              Carrier Assignment
             </label>
             <select
               value={form.carrierId}
               onChange={e => set('carrierId', e.target.value)}
               className="input-primary text-sm py-2"
             >
+              <option value="">-- Unassigned (Add to Queue) --</option>
               {carriers.filter(c => c.status === 'active').map(c => (
                 <option key={c.id} value={c.id}>
                   {c.firstName} {c.lastName} — {EQUIPMENT_TYPE_LABELS[c.equipmentType]} ({c.dispatchFeePercent}% fee)
@@ -181,7 +183,7 @@ function NewLoadModal({ carriers, onClose, onSaved }: NewLoadModalProps) {
             {input('Rate ($)', 'rate', 'number', '0', true)}
             <div>
               <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Carrier</label>
-              <p className="text-slate-400 text-sm py-2">{selectedCarrier?.firstName} {selectedCarrier?.lastName}</p>
+              <p className="text-slate-400 text-sm py-2">{selectedCarrier ? `${selectedCarrier.firstName} ${selectedCarrier.lastName}` : 'Unassigned'}</p>
             </div>
             {/* Live calculations */}
             <div className="col-span-2 p-4 rounded-xl bg-amber-500/[0.06] border border-amber-500/15 grid grid-cols-3 gap-4">
@@ -229,175 +231,512 @@ function NewLoadModal({ carriers, onClose, onSaved }: NewLoadModalProps) {
   );
 }
 
-// ─── Status Tabs ──────────────────────────────────────────────────────────────
-
-const STATUS_TABS: Array<LoadStatus | 'all'> = [
-  'all', ...LOAD_STATUS_ORDER,
-];
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ─── Main Loads Page Component ────────────────────────────────────────────────
 
 export default function LoadsPage() {
   const router = useRouter();
   const [loads, setLoads] = useState<SonexLoad[]>([]);
   const [carriers, setCarriers] = useState<SonexCarrier[]>([]);
+  
+  // Tabs State
+  const [activeBoardTab, setActiveBoardTab] = useState<'dispatch' | 'unassigned' | 'log'>('dispatch');
+
+  // Master Log State
   const [search, setSearch] = useState('');
   const [statusTab, setStatusTab] = useState<LoadStatus | 'all'>('all');
   const [carrierFilter, setCarrierFilter] = useState('all');
+  
+  // Modals & Scan state
   const [showNew, setShowNew] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanStep, setScanStep] = useState('');
+  const aiFileRef = useRef<HTMLInputElement>(null);
 
-  const load = () => {
+  // Dynamic quick-assign load selections for carriers
+  const [quickAssignLoads, setQuickAssignLoads] = useState<Record<string, string>>({});
+
+  const reloadData = () => {
     getLoads().then(setLoads);
     getCarriers().then(setCarriers);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    reloadData();
+  }, []);
 
-  const carrierMap = new Map(carriers.map(c => [c.id, `${c.firstName} ${c.lastName}`]));
+  const carrierMap = useMemo(() => new Map(carriers.map(c => [c.id, `${c.firstName} ${c.lastName}`])), [carriers]);
 
-  const filtered = loads.filter(l => {
-    const q = search.toLowerCase();
-    const searchMatch = l.loadNumber.toLowerCase().includes(q)
-      || l.brokerName.toLowerCase().includes(q)
-      || (carrierMap.get(l.carrierId) ?? '').toLowerCase().includes(q)
-      || l.pickupState.toLowerCase().includes(q)
-      || l.deliveryState.toLowerCase().includes(q);
-    const statusMatch = statusTab === 'all' || l.status === statusTab;
-    const carrierMatch = carrierFilter === 'all' || l.carrierId === carrierFilter;
-    return searchMatch && statusMatch && carrierMatch;
-  }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  // Grouped loads
+  const unassignedLoads = useMemo(() => {
+    return loads.filter(l => !l.carrierId);
+  }, [loads]);
 
-  const countByStatus = (s: LoadStatus | 'all') =>
-    s === 'all' ? loads.length : loads.filter(l => l.status === s).length;
+  const activeCarriers = useMemo(() => {
+    return carriers.filter(c => c.status === 'active');
+  }, [carriers]);
+
+  // Master Log Filter
+  const filteredLoads = useMemo(() => {
+    return loads.filter(l => {
+      const q = search.toLowerCase();
+      const searchMatch = l.loadNumber.toLowerCase().includes(q)
+        || l.brokerName.toLowerCase().includes(q)
+        || (carrierMap.get(l.carrierId) ?? '').toLowerCase().includes(q)
+        || l.pickupState.toLowerCase().includes(q)
+        || l.deliveryState.toLowerCase().includes(q);
+      const statusMatch = statusTab === 'all' || l.status === statusTab;
+      const carrierMatch = carrierFilter === 'all' || l.carrierId === carrierFilter;
+      return searchMatch && statusMatch && carrierMatch;
+    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [loads, search, statusTab, carrierFilter, carrierMap]);
+
+  // Quick assign load logic
+  const handleQuickAssign = async (carrierId: string) => {
+    const loadId = quickAssignLoads[carrierId];
+    if (!loadId) return;
+
+    try {
+      const selectedCarrier = carriers.find(c => c.id === carrierId);
+      const fee = selectedCarrier?.dispatchFeePercent ?? 10;
+      await updateLoad(loadId, { carrierId, dispatchFeePercent: fee });
+      toast.success(`✓ Load successfully assigned to carrier!`);
+      setQuickAssignLoads(prev => {
+        const next = { ...prev };
+        delete next[carrierId];
+        return next;
+      });
+      reloadData();
+    } catch (e) {
+      toast.error('Failed to assign load');
+    }
+  };
+
+  // AI Parse Rate Confirmation from Dispatch Board
+  const handleAiUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setScanning(true);
+    setScanStep('Scanning Rate Confirmation PDF...');
+    await new Promise(r => setTimeout(r, 700));
+    setScanStep('Extracting freight route and rate...');
+    await new Promise(r => setTimeout(r, 700));
+
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/parse-rc', {
+        method: 'POST',
+        body: fd
+      });
+      const json = await res.json();
+      if (json.success) {
+        // Automatically save as unassigned load
+        await addLoad({
+          ...json.data,
+          carrierId: '', // Unassigned
+          status: 'booked'
+        });
+        toast.success(`✓ AI Parsed and created unassigned load: ${json.data.commodity} ($${json.data.rate})!`);
+        reloadData();
+      } else {
+        toast.error(json.error || 'Failed to parse rate confirmation');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Error connecting to document parser');
+    } finally {
+      setScanning(false);
+      if (aiFileRef.current) aiFileRef.current.value = '';
+    }
+  };
 
   return (
-    <div className="p-6 animate-fade-in">
+    <div className="p-6 animate-fade-in text-white space-y-6 max-w-7xl mx-auto">
+      
       {/* Header */}
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold text-white">Loads</h1>
-          <span className="bg-white/10 text-slate-400 text-xs font-semibold px-2.5 py-1 rounded-full">
-            {loads.length}
-          </span>
+      <div className="flex items-center justify-between border-b border-white/5 pb-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-black uppercase tracking-widest bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/20">DataTruck TMS</span>
+            <h1 className="text-2xl font-black tracking-tight">Dispatch Control Center</h1>
+          </div>
+          <p className="text-slate-400 text-xs">Automate load booking, fleet dispatching, and settlements</p>
         </div>
-        <button
-          onClick={() => setShowNew(true)}
-          className="btn-primary"
-          style={{ background: '#F59E0B', color: '#000' }}
-        >
-          <Plus size={16} /> New Load
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => aiFileRef.current?.click()}
+            disabled={scanning}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-amber-500/20 bg-amber-500/10 text-amber-400 font-bold text-xs hover:bg-amber-500/20 transition-all uppercase shrink-0"
+          >
+            {scanning ? (
+              <>
+                <Loader2 className="animate-spin" size={13} />
+                Scanning RC...
+              </>
+            ) : (
+              <>
+                <Sparkles size={13} />
+                AI Parse Rate Con
+              </>
+            )}
+          </button>
+          <button
+            onClick={() => setShowNew(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 text-black font-black text-xs hover:bg-amber-400 transition-all uppercase shrink-0"
+          >
+            <Plus size={14} /> New Manual Order
+          </button>
+        </div>
       </div>
+      <input ref={aiFileRef} type="file" className="hidden" accept="image/*,application/pdf" onChange={handleAiUpload} />
 
-      {/* Status Tabs */}
-      <div className="flex gap-1 mb-4 overflow-x-auto border-b border-white/[0.06] pb-0">
-        {STATUS_TABS.map(s => {
-          const count = countByStatus(s);
+      {/* Main Boards Tabs Navigation */}
+      <div className="flex gap-2 border-b border-white/5 pb-px">
+        {[
+          { id: 'dispatch', label: 'Active Dispatch Board', count: activeCarriers.length, sub: 'Fleet control' },
+          { id: 'unassigned', label: 'Unassigned Order Queue', count: unassignedLoads.length, sub: 'Unbooked loads' },
+          { id: 'log', label: 'Master Load Log', count: loads.length, sub: 'All logs' },
+        ].map(tab => {
+          const active = activeBoardTab === tab.id;
           return (
             <button
-              key={s}
-              onClick={() => setStatusTab(s)}
-              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold whitespace-nowrap border-b-2 -mb-px transition-all ${
-                statusTab === s
-                  ? 'text-amber-400 border-amber-400'
-                  : 'text-slate-500 border-transparent hover:text-slate-300'
+              key={tab.id}
+              onClick={() => setActiveBoardTab(tab.id as any)}
+              className={`flex items-center gap-2 px-4 py-3 border-b-2 font-bold text-xs uppercase tracking-wider transition-all ${
+                active ? 'border-amber-500 text-amber-400' : 'border-transparent text-slate-500 hover:text-slate-300'
               }`}
             >
-              {s === 'all' ? 'All' : LOAD_STATUS_LABELS[s as LoadStatus]}
-              {count > 0 && (
-                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
-                  statusTab === s ? 'bg-amber-500/30 text-amber-300' : 'bg-white/[0.06] text-slate-500'
-                }`}>{count}</span>
-              )}
+              {tab.label}
+              <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                active ? 'bg-amber-500/20 text-amber-300 border border-amber-500/20' : 'bg-white/5 text-slate-500'
+              }`}>{tab.count}</span>
             </button>
           );
         })}
       </div>
 
-      {/* Search + Carrier Filter */}
-      <div className="flex gap-3 mb-5 flex-wrap">
-        <div className="relative flex-1 max-w-xs">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search loads, brokers, routes…"
-            className="input-primary pl-9 py-2.5 text-sm"
-          />
-        </div>
-        <div className="relative">
-          <Filter size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none" />
-          <select
-            value={carrierFilter}
-            onChange={e => setCarrierFilter(e.target.value)}
-            className="input-primary pl-8 py-2.5 text-sm pr-8 appearance-none"
-          >
-            <option value="all">All Carriers</option>
-            {carriers.map(c => (
-              <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>
-            ))}
-          </select>
-        </div>
-      </div>
+      {/* BOARD VIEW 1: ACTIVE DISPATCH BOARD */}
+      {activeBoardTab === 'dispatch' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {activeCarriers.map(carrier => {
+            // Find active load (not completed) for this carrier
+            const carrierLoads = loads.filter(l => l.carrierId === carrier.id);
+            const activeLoad = carrierLoads.find(l => !['delivered', 'pod_received', 'invoiced', 'paid'].includes(l.status));
+            const completedCount = carrierLoads.length - (activeLoad ? 1 : 0);
 
-      {/* Table */}
-      <div className="glass-card overflow-hidden">
-        {filtered.length === 0 ? (
-          <div className="py-16 text-center">
-            <Package size={40} className="text-slate-700 mx-auto mb-3" />
-            <p className="text-slate-500 text-sm">No loads found</p>
-            <p className="text-slate-600 text-xs mt-1">Try adjusting your filters or create a new load.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b border-white/[0.06]">
-                <tr>
-                  {['Load #', 'Carrier', 'Broker', 'Route', 'Date', 'Rate', 'Fee', 'Status', ''].map(h => (
-                    <th key={h} className="text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-4 py-3">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/[0.04]">
-                {filtered.map(load => (
-                  <tr key={load.id}
-                    onClick={() => router.push(`/sonex/loads/${load.id}`)}
-                    className="table-row-hover cursor-pointer group">
-                    <td className="px-4 py-3.5 font-mono text-xs text-amber-400 font-semibold">{load.loadNumber}</td>
-                    <td className="px-4 py-3.5 text-slate-300 text-xs">
-                      {carrierMap.get(load.carrierId) ?? '—'}
-                    </td>
-                    <td className="px-4 py-3.5 text-slate-400 text-xs max-w-[120px] truncate">{load.brokerName}</td>
-                    <td className="px-4 py-3.5">
-                      <span className="text-slate-300 text-xs font-medium">{load.pickupState}</span>
-                      <span className="text-slate-600 text-xs mx-1">→</span>
-                      <span className="text-slate-300 text-xs font-medium">{load.deliveryState}</span>
-                    </td>
-                    <td className="px-4 py-3.5 text-slate-500 text-xs">
-                      {new Date(load.pickupDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    </td>
-                    <td className="px-4 py-3.5 text-white font-semibold text-xs">{fmt$(load.rate)}</td>
-                    <td className="px-4 py-3.5 text-amber-400/80 text-xs">{fmt$(load.dispatchFeeAmount)}</td>
-                    <td className="px-4 py-3.5">
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${STATUS_BADGE[load.status]}`}>
-                        {LOAD_STATUS_LABELS[load.status]}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <ChevronRight size={14} className="text-slate-600 group-hover:text-amber-400 transition-colors" />
-                    </td>
-                  </tr>
+            return (
+              <div key={carrier.id} className="rounded-2xl border border-white/[0.05] bg-[#0E1524]/60 p-5 space-y-4 flex flex-col justify-between">
+                
+                {/* Carrier info */}
+                <div className="space-y-1">
+                  <div className="flex justify-between items-start">
+                    <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider">Motive Telematics</span>
+                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded border ${
+                      activeLoad ? 'text-amber-400 bg-amber-500/10 border-amber-500/25' : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25'
+                    }`}>
+                      {activeLoad ? 'In Transit' : 'Available (Empty)'}
+                    </span>
+                  </div>
+                  <h3 className="text-sm font-bold text-white mt-1.5">{carrier.firstName} {carrier.lastName}</h3>
+                  <p className="text-[10px] text-slate-500">
+                    {EQUIPMENT_TYPE_LABELS[carrier.equipmentType]} · {carrier.truckMake} Plate: {carrier.truckPlate}
+                  </p>
+                </div>
+
+                {/* Assigned Load Details */}
+                {activeLoad ? (
+                  <div 
+                    onClick={() => router.push(`/sonex/loads/${activeLoad.id}`)}
+                    className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.04] hover:border-amber-500/30 transition-all cursor-pointer space-y-2.5"
+                  >
+                    <div className="flex justify-between items-center">
+                      <span className="font-mono text-xs font-bold text-amber-400">{activeLoad.loadNumber}</span>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{activeLoad.status}</span>
+                    </div>
+                    <p className="text-xs text-white truncate">
+                      {activeLoad.pickupCity}, {activeLoad.pickupState} → {activeLoad.deliveryCity}, {activeLoad.deliveryState}
+                    </p>
+                    <div className="flex justify-between items-center text-[10px] text-slate-500">
+                      <span>Rate: <span className="text-slate-300 font-mono font-semibold">{fmt$(activeLoad.rate)}</span></span>
+                      <span>Deliv: {new Date(activeLoad.deliveryDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3.5 rounded-xl border border-dashed border-white/5 bg-white/[0.01] space-y-3">
+                    <p className="text-xs text-slate-600 text-center">No active load assigned.</p>
+                    {unassignedLoads.length > 0 ? (
+                      <div className="space-y-2">
+                        <select
+                          value={quickAssignLoads[carrier.id] || ''}
+                          onChange={e => setQuickAssignLoads({ ...quickAssignLoads, [carrier.id]: e.target.value })}
+                          className="w-full rounded-xl border border-white/10 bg-[#0E1524] px-3 py-2 text-[10px] font-bold text-slate-300 focus:outline-none"
+                        >
+                          <option value="">-- Select Unassigned Load --</option>
+                          {unassignedLoads.map(ul => (
+                            <option key={ul.id} value={ul.id} className="bg-[#050B18]">
+                              {ul.loadNumber} ({ul.pickupCity} → {ul.deliveryCity}) - {fmt$(ul.rate)}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => handleQuickAssign(carrier.id)}
+                          disabled={!quickAssignLoads[carrier.id]}
+                          className="w-full py-1.5 bg-amber-500 text-black text-[9px] font-black uppercase tracking-wider rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-amber-400 transition-all"
+                        >
+                          Assign Selected Load
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-slate-700 text-center">Unassigned order queue is empty.</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Footer specs */}
+                <div className="flex justify-between items-center text-[9px] text-slate-500 pt-2 border-t border-white/5 font-semibold">
+                  <span>HOS: 14h active clock</span>
+                  <span>{completedCount} Completed loads</span>
+                </div>
+
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* BOARD VIEW 2: UNASSIGNED ORDER QUEUE */}
+      {activeBoardTab === 'unassigned' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* Queue List */}
+          <div className="lg:col-span-2 space-y-3">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Unassigned Loads Pipeline</h3>
+            {unassignedLoads.length === 0 ? (
+              <div className="glass-card p-10 text-center space-y-2">
+                <Package size={32} className="mx-auto text-slate-700" />
+                <p className="text-sm text-slate-500">Unassigned load queue is empty.</p>
+                <p className="text-xs text-slate-600">All booked loads have been successfully assigned to active carriers.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {unassignedLoads.map(load => (
+                  <div key={load.id} className="rounded-2xl border border-white/[0.05] bg-[#0E1524]/60 p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-bold text-amber-400">{load.loadNumber}</span>
+                        <span className="text-[10px] text-slate-500">· {load.commodity}</span>
+                      </div>
+                      <p className="text-xs text-white leading-snug truncate">
+                        {load.pickupCity}, {load.pickupState} → {load.deliveryCity}, {load.deliveryState}
+                      </p>
+                      <p className="text-[10px] text-slate-500">
+                        Pickup: {fmtDate(load.pickupDate)} · {load.miles.toLocaleString()} mi
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0 w-full sm:w-auto justify-between sm:justify-end">
+                      <div className="text-right">
+                        <p className="font-mono text-xs font-bold text-white">{fmt$(load.rate)}</p>
+                        <p className="text-[9px] text-slate-500">Broker: {load.brokerName}</p>
+                      </div>
+
+                      {/* Dropdown to assign carrier */}
+                      <div className="flex gap-2">
+                        <select
+                          onChange={e => {
+                            if (e.target.value) {
+                              const fee = carriers.find(c => c.id === e.target.value)?.dispatchFeePercent ?? 10;
+                              updateLoad(load.id, { carrierId: e.target.value, dispatchFeePercent: fee }).then(() => {
+                                toast.success('✓ Load assigned!');
+                                reloadData();
+                              });
+                            }
+                          }}
+                          className="rounded-lg border border-white/10 bg-[#080B14] px-2.5 py-1.5 text-[10px] font-bold text-slate-300 focus:outline-none"
+                        >
+                          <option value="">-- Assign Carrier --</option>
+                          {activeCarriers.map(ac => (
+                            <option key={ac.id} value={ac.id}>
+                              {ac.firstName} {ac.lastName}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => router.push(`/sonex/loads/${load.id}`)}
+                          className="p-1.5 rounded-lg border border-white/10 hover:bg-white/5 transition-colors"
+                          title="Edit"
+                        >
+                          <ChevronRight size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+
+          {/* AI Drag-and-drop OCR Parser Sidebar */}
+          <div className="space-y-4">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">OCR Load Creator (TruckGPT)</h3>
+            <div 
+              onClick={() => aiFileRef.current?.click()}
+              className="border border-dashed border-white/10 rounded-2xl p-8 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-white/[0.02] hover:border-amber-500/30 transition-all space-y-4"
+            >
+              {scanning ? (
+                <div className="space-y-2 py-4">
+                  <Loader2 className="animate-spin text-amber-500 mx-auto" size={24} />
+                  <p className="text-xs font-bold text-white">{scanStep}</p>
+                </div>
+              ) : (
+                <>
+                  <div className="w-12 h-12 rounded-full bg-white/[0.03] flex items-center justify-center">
+                    <UploadCloud size={20} className="text-slate-400" />
+                  </div>
+                  <div>
+                    <p className="text-white text-xs font-bold">Import Rate Confirmation</p>
+                    <p className="text-slate-500 text-[10px] mt-1">Upload broker order PDF or image for instant automated load creation</p>
+                  </div>
+                  <span className="text-[9px] text-amber-500/80 bg-amber-500/10 px-3 py-1 rounded-full font-bold tracking-wider uppercase border border-amber-500/10">
+                    Parse Document
+                  </span>
+                </>
+              )}
+            </div>
+            <div className="rounded-2xl border border-white/[0.05] bg-[#0E1524]/60 p-4 space-y-2.5 text-xs">
+              <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+                <FileText size={13} className="text-amber-500" />
+                <span className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">DT Automations Guide</span>
+              </div>
+              <p className="text-slate-500 text-[10px] leading-relaxed">
+                When you drag and drop a Rate Confirmation document:
+                <br />1. DataTruck OCR parses route stops, pickup dates, broker contacts, commodity descriptions, and rate payouts.
+                <br />2. The load is created in under 15 seconds and appended to the <strong>Unassigned Queue</strong>.
+                <br />3. Assign it to any available carrier immediately using the dropdown selector.
+              </p>
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* BOARD VIEW 3: MASTER LOAD LOG (TABULAR) */}
+      {activeBoardTab === 'log' && (
+        <div className="space-y-4">
+          
+          {/* Filters Row */}
+          <div className="flex gap-3 flex-wrap">
+            <div className="relative flex-1 max-w-xs">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search loads, brokers, routes…"
+                className="input-primary pl-9 py-2.5 text-sm"
+              />
+            </div>
+            <div className="relative">
+              <Filter size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none" />
+              <select
+                value={carrierFilter}
+                onChange={e => setCarrierFilter(e.target.value)}
+                className="input-primary pl-8 py-2.5 text-sm pr-8 appearance-none"
+              >
+                <option value="all">All Carriers</option>
+                {carriers.map(c => (
+                  <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Status filter tabs */}
+          <div className="flex gap-1 overflow-x-auto border-b border-white/[0.06] pb-0">
+            {['all', ...LOAD_STATUS_ORDER].map(s => {
+              const count = s === 'all' ? loads.length : loads.filter(l => l.status === s).length;
+              return (
+                <button
+                  key={s}
+                  onClick={() => setStatusTab(s as any)}
+                  className={`flex items-center gap-1.5 px-3 py-2 text-[10px] uppercase tracking-wider font-bold whitespace-nowrap border-b-2 -mb-px transition-all ${
+                    statusTab === s
+                      ? 'text-amber-400 border-amber-400'
+                      : 'text-slate-500 border-transparent hover:text-slate-300'
+                  }`}
+                >
+                  {s === 'all' ? 'All' : LOAD_STATUS_LABELS[s as LoadStatus] || s}
+                  {count > 0 && (
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                      statusTab === s ? 'bg-amber-500/30 text-amber-300' : 'bg-white/[0.06] text-slate-500'
+                    }`}>{count}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Tabular Output */}
+          <div className="glass-card overflow-hidden">
+            {filteredLoads.length === 0 ? (
+              <div className="py-16 text-center">
+                <Package size={40} className="text-slate-700 mx-auto mb-3" />
+                <p className="text-slate-500 text-sm">No loads found</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="border-b border-white/[0.06]">
+                    <tr>
+                      {['Load #', 'Carrier', 'Broker', 'Route', 'Date', 'Rate', 'Fee', 'Status', ''].map(h => (
+                        <th key={h} className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-4 py-3">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/[0.04]">
+                    {filteredLoads.map(load => (
+                      <tr key={load.id}
+                        onClick={() => router.push(`/sonex/loads/${load.id}`)}
+                        className="table-row-hover cursor-pointer group">
+                        <td className="px-4 py-3.5 font-mono text-xs text-amber-400 font-semibold">{load.loadNumber}</td>
+                        <td className="px-4 py-3.5 text-slate-300 text-xs">
+                          {carrierMap.get(load.carrierId) ?? '—'}
+                        </td>
+                        <td className="px-4 py-3.5 text-slate-400 text-xs max-w-[120px] truncate">{load.brokerName}</td>
+                        <td className="px-4 py-3.5 text-xs text-slate-300">
+                          {load.pickupState} → {load.deliveryState}
+                        </td>
+                        <td className="px-4 py-3.5 text-slate-500 text-xs">
+                          {fmtDate(load.pickupDate)}
+                        </td>
+                        <td className="px-4 py-3.5 text-white font-semibold text-xs font-mono">{fmt$(load.rate)}</td>
+                        <td className="px-4 py-3.5 text-slate-400 text-xs font-mono">{fmt$(load.dispatchFeeAmount)}</td>
+                        <td className="px-4 py-3.5">
+                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${STATUS_BADGE[load.status] || 'text-slate-400'}`}>
+                            {LOAD_STATUS_LABELS[load.status] || load.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <ChevronRight size={14} className="text-slate-600 group-hover:text-amber-400 transition-colors" />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Modal */}
       {showNew && (
-        <NewLoadModal carriers={carriers} onClose={() => setShowNew(false)} onSaved={load} />
+        <NewLoadModal carriers={carriers} onClose={() => setShowNew(false)} onSaved={reloadData} />
       )}
     </div>
   );
+}
+
+function fmtDate(d: string) {
+  return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
 }
