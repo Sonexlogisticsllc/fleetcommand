@@ -5,13 +5,13 @@ import {
   Truck, MapPin, PackageCheck, CheckCircle, Camera, FileUp, Download,
   AlertTriangle, Clock, Weight, DollarSign, Building2, Timer,
   Moon, Zap, XCircle, PhoneCall, ChevronDown, RefreshCw, Plus,
-  Image as ImageIcon, FileText, Trash2, Eye, Navigation, AlertOctagon,
+  Image as ImageIcon, FileText, Trash2, Eye, Navigation, AlertOctagon, Wrench,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useSonexAuth } from '@/lib/sonexAuth';
 import {
   getLoadsByCarrier, getCheckins, addCheckin, updateLoad,
-  addCargoPhoto, getCargoPhotos, getCarriers,
+  addCargoPhoto, getCargoPhotos,
 } from '@/lib/sonexStore';
 import { uploadFile, uploadFiles } from '@/lib/storageUtils';
 import type { SonexLoad, SonexLoadCheckin, SonexCargoPhoto, CheckinEvent, LoadStatus, SonexCarrier } from '@/lib/sonexTypes';
@@ -905,26 +905,12 @@ function PastLoadRow({ load }: { load: SonexLoad }) {
 export default function CarrierLoadsPage() {
   const { user } = useSonexAuth();
   
-  // Local state to store selected demo carrier
-  const [demoCarrierId, setDemoCarrierId] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('sonex_demo_carrier_id') || '';
-    }
-    return '';
-  });
-  
-  const [carriers, setCarriers] = useState<SonexCarrier[]>([]);
   const [loads, setLoads] = useState<SonexLoad[]>([]);
   const [loading, setLoading] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true);
 
   // Effective carrierId
-  const carrierId = demoCarrierId || user?.carrierId || '';
-
-  // Load all carriers for developer demo simulation
-  useEffect(() => {
-    getCarriers().then(setCarriers).catch(console.error);
-  }, []);
+  const carrierId = user?.carrierId || '';
 
   const refresh = useCallback(async () => {
     if (!carrierId) {
@@ -961,13 +947,6 @@ export default function CarrierLoadsPage() {
   const activeLoad = loads.find(l => ACTIVE_STATUSES.includes(l.status));
   const pastLoads = loads.filter(l => COMPLETED_STATUSES.includes(l.status));
 
-  const handleDemoCarrierChange = (id: string) => {
-    setDemoCarrierId(id);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('sonex_demo_carrier_id', id);
-    }
-  };
-
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
       <div className="flex items-center justify-between gap-4">
@@ -981,32 +960,6 @@ export default function CarrierLoadsPage() {
           SOS Support
         </a>
       </div>
-
-      {/* Demo Carrier Switcher â€” extremely helpful for testing */}
-      {carriers.length > 0 && (
-        <div className="rounded-2xl p-4 flex flex-col gap-2.5" style={{ background: 'rgba(245,158,11,0.04)', border: '1px solid rgba(245,158,11,0.15)' }}>
-          <div className="flex items-center justify-between">
-            <span className="text-amber-400 text-xs font-black uppercase tracking-wider">ðŸ”§ Developer Carrier Simulator</span>
-            {carrierId && (
-              <span className="text-[10px] text-slate-500">Currently viewing: {carriers.find(c => c.id === carrierId)?.firstName || 'Selected'}</span>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <select
-              value={carrierId}
-              onChange={e => handleDemoCarrierChange(e.target.value)}
-              className="flex-1 bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500/40"
-            >
-              <option value="" className="bg-[#050B18]">-- Select Carrier Profile to Simulate --</option>
-              {carriers.map(c => (
-                <option key={c.id} value={c.id} className="bg-[#050B18]">
-                  {c.firstName} {c.lastName} ({c.equipmentType})
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      )}
 
       {!carrierId ? (
         <div className="flex flex-col items-center justify-center py-20 px-6 text-center rounded-2xl border border-white/[0.06] bg-white/[0.01]">
