@@ -1,4 +1,4 @@
-﻿// â”€â”€â”€ Sonex Dispatch Hub â€” Drizzle Turso/SQLite Store â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€â”€ Sonex Dispatch Hub â€” Drizzle Turso/SQLite Store â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 'use server';
 
 import { db } from '../db/client';
@@ -6,6 +6,8 @@ import * as schema from '../db/schema';
 import { eq, desc, and, inArray, sql, count, sum, avg, gte } from 'drizzle-orm';
 import { hash } from '@node-rs/argon2';
 import crypto from 'crypto';
+import { getCurrentUserAction } from './authActions';
+
 
 import {
   SonexCarrier, SonexLoad, SonexLoadCheckin, SonexCargoPhoto,
@@ -375,19 +377,24 @@ export async function updateLoad(id: string, data: Partial<SonexLoad>): Promise<
     }
 
     if (data.status && data.status !== current.status) {
-      const allowedTransitions: Record<LoadStatus, LoadStatus[]> = {
-        booked: ['dispatched'],
-        dispatched: ['booked', 'in_transit'],
-        in_transit: ['dispatched', 'delivered'],
-        delivered: ['in_transit', 'pod_received'],
-        pod_received: ['delivered', 'invoiced'],
-        invoiced: ['pod_received', 'paid'],
-        paid: ['invoiced'],
-      };
-      
-      const allowed = allowedTransitions[current.status as LoadStatus] || [];
-      if (!allowed.includes(data.status)) {
-        throw new Error(`Invalid status transition from "${current.status}" to "${data.status}".`);
+      const currentUser = await getCurrentUserAction();
+      const isAdmin = currentUser?.role === 'admin';
+
+      if (!isAdmin) {
+        const allowedTransitions: Record<LoadStatus, LoadStatus[]> = {
+          booked: ['dispatched'],
+          dispatched: ['booked', 'in_transit'],
+          in_transit: ['dispatched', 'delivered'],
+          delivered: ['in_transit', 'pod_received'],
+          pod_received: ['delivered', 'invoiced'],
+          invoiced: ['pod_received', 'paid'],
+          paid: ['invoiced'],
+        };
+        
+        const allowed = allowedTransitions[current.status as LoadStatus] || [];
+        if (!allowed.includes(data.status)) {
+          throw new Error(`Invalid status transition from "${current.status}" to "${data.status}".`);
+        }
       }
 
       // Log audit checkin for status change

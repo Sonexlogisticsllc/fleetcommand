@@ -23,6 +23,18 @@ const statusBadge: Record<CarrierStatus, string> = {
   onboarding: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/25',
 };
 
+// ─── Section Helper ───────────────────────────────────────────────────────────
+
+const Section = ({ title, icon: Icon, children }: { title: string; icon: React.ElementType; children: React.ReactNode }) => (
+  <div>
+    <div className="flex items-center gap-2 mb-3 pb-2 border-b border-white/[0.06]">
+      <Icon size={14} className="text-amber-400" />
+      <h4 className="text-xs font-semibold text-amber-400 uppercase tracking-wider">{title}</h4>
+    </div>
+    <div className="grid grid-cols-2 gap-3">{children}</div>
+  </div>
+);
+
 // ─── Add Carrier Modal ────────────────────────────────────────────────────────
 
 interface AddCarrierModalProps { onClose: () => void; onSaved: () => void; }
@@ -126,15 +138,6 @@ function AddCarrierModal({ onClose, onSaved }: AddCarrierModalProps) {
     </label>
   );
 
-  const Section = ({ title, icon: Icon, children }: { title: string; icon: React.ElementType; children: React.ReactNode }) => (
-    <div>
-      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-white/[0.06]">
-        <Icon size={14} className="text-amber-400" />
-        <h4 className="text-xs font-semibold text-amber-400 uppercase tracking-wider">{title}</h4>
-      </div>
-      <div className="grid grid-cols-2 gap-3">{children}</div>
-    </div>
-  );
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">

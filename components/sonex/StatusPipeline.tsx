@@ -20,7 +20,13 @@ interface StatusBadgeProps {
 }
 
 export function LoadStatusBadge({ status, size = 'md' }: StatusBadgeProps) {
-  const c = STATUS_COLORS[status];
+  const c = STATUS_COLORS[status] || {
+    bg: 'rgba(100, 116, 139, 0.12)',
+    border: 'rgba(100, 116, 139, 0.3)',
+    text: '#94A3B8',
+    dot: '#64748B',
+  };
+  const label = LOAD_STATUS_LABELS[status] || status || 'Unknown';
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full font-semibold ${
@@ -29,7 +35,7 @@ export function LoadStatusBadge({ status, size = 'md' }: StatusBadgeProps) {
       style={{ background: c.bg, border: `1px solid ${c.border}`, color: c.text }}
     >
       <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: c.dot }} />
-      {LOAD_STATUS_LABELS[status]}
+      {label}
     </span>
   );
 }

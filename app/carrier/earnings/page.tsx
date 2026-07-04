@@ -2,9 +2,12 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  DollarSign, TrendingUp, FileDown, ChevronDown, Calendar,
-  ArrowRight,
+  DollarSign, TrendingUp, BarChart2, Truck, Download, FileDown,
+  ChevronDown, Calendar, ArrowRight, RefreshCw, Eye
 } from 'lucide-react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+} from 'recharts';
 import toast from 'react-hot-toast';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
@@ -17,112 +20,125 @@ import { LOAD_STATUS_LABELS } from '@/lib/sonexTypes';
 
 const COMPLETED: LoadStatus[] = ['delivered', 'pod_received', 'invoiced', 'paid'];
 
-type FilterRange = 'this_week' | 'this_month' | 'last_month' | 'all_time';
+type FilterRange = 'this_week' | 'this_month' | 'last_month' | 'all_time' | 'custom';
 
-const FILTER_LABELS: Record<FilterRange, string> = {
+const FILTER_LABELS: Record<Exclude<FilterRange, 'custom'>, string> = {
   this_week: 'This Week',
   this_month: 'This Month',
   last_month: 'Last Month',
   all_time: 'All Time',
 };
 
-function getDateBounds(range: FilterRange): { start: Date; end: Date } {
-  const now = new Date();
-  const end = new Date(now);
-  end.setHours(23, 59, 59, 999);
+const fmt$ = (n: number) => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtN = (n: number) => n.toLocaleString('en-US');
 
-  if (range === 'this_week') {
-    const start = new Date(now);
-    const dow = now.getDay();
-    start.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1));
-    start.setHours(0, 0, 0, 0);
-    return { start, end };
-  }
-  if (range === 'this_month') {
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    return { start, end };
-  }
-  if (range === 'last_month') {
-    const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastEnd = new Date(now.getFullYear(), now.getMonth(), 0);
-    lastEnd.setHours(23, 59, 59, 999);
-    return { start, end: lastEnd };
-  }
-  return { start: new Date(0), end };
+function getWeekStart(date: Date): Date {
+  const d = new Date(date);
+  const day = d.getDay();
+  d.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 
-function filterLoads(loads: SonexLoad[], range: FilterRange): SonexLoad[] {
-  if (range === 'all_time') return loads;
-  const { start, end } = getDateBounds(range);
+function getWeekEnd(date: Date): Date {
+  const start = getWeekStart(date);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+  return end;
+}
+
+function filterLoadsByRange(loads: SonexLoad[], range: FilterRange, customFrom: string, customTo: string): SonexLoad[] {
+  const now = new Date();
+  let from: Date, to: Date;
+
+  if (range === 'this_week') {
+    from = getWeekStart(now);
+    to = getWeekEnd(now);
+  } else if (range === 'this_month') {
+    from = new Date(now.getFullYear(), now.getMonth(), 1);
+    to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+  } else if (range === 'last_month') {
+    from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    to = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+  } else if (range === 'custom' && customFrom && customTo) {
+    from = new Date(customFrom);
+    to = new Date(customTo + 'T23:59:59');
+  } else {
+    return loads;
+  }
+
   return loads.filter(l => {
     const d = new Date(l.pickupDate + 'T00:00:00');
-    return d >= start && d <= end;
+    return d >= from && d <= to;
   });
 }
 
-function fmt$(n: number) {
-  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function buildWeeklyData(loads: SonexLoad[]): { week: string; gross: number; net: number }[] {
+  const weeks: Map<string, { gross: number; net: number }> = new Map();
+  const now = new Date();
+
+  for (let i = 7; i >= 0; i--) {
+    const weekDate = new Date(now);
+    weekDate.setDate(now.getDate() - i * 7);
+    const ws = getWeekStart(weekDate);
+    const key = ws.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    weeks.set(key, { gross: 0, net: 0 });
+  }
+
+  loads.forEach(l => {
+    const ws = getWeekStart(new Date(l.pickupDate + 'T00:00:00'));
+    const key = ws.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    if (weeks.has(key)) {
+      const w = weeks.get(key)!;
+      w.gross += l.rate;
+      w.net += l.carrierNet;
+    }
+  });
+
+  return Array.from(weeks.entries()).map(([week, data]) => ({ week, ...data }));
 }
+
 function fmtDate(d: string) {
-  return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
+  return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 // ─── Summary Card ─────────────────────────────────────────────────────────────
 
-function SummaryCard({
-  label, value, sub, color = 'text-white', icon,
-}: { label: string; value: string; sub?: string; color?: string; icon?: React.ReactNode }) {
+function SummaryCard({ icon: Icon, label, value, sub, amber }: {
+  icon: React.ElementType; label: string; value: string; sub?: string; amber?: boolean;
+}) {
   return (
-    <div className="rounded-2xl px-3 py-4 flex flex-col gap-1"
-      style={{ background: 'rgba(13,31,60,0.55)', border: '1px solid rgba(255,255,255,0.06)' }}>
-      {icon && <div className="mb-1">{icon}</div>}
-      <div className="text-slate-500 text-[10px] uppercase tracking-widest leading-tight">{label}</div>
-      <div className={`font-black font-mono text-lg leading-tight ${color}`}>{value}</div>
-      {sub && <div className="text-slate-600 text-[10px]">{sub}</div>}
+    <div className={`glass-card p-5 flex flex-col gap-3 ${amber ? 'border-amber-500/20 ring-1 ring-amber-500/10' : ''}`}>
+      <div className="flex items-center justify-between">
+        <div className={`p-2 rounded-xl ${amber ? 'bg-amber-500/15' : 'bg-white/[0.06]'}`}>
+          <Icon size={16} className={amber ? 'text-amber-400' : 'text-slate-400'} />
+        </div>
+      </div>
+      <div>
+        <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">{label}</p>
+        <p className={`text-2xl font-bold mt-1 ${amber ? 'text-amber-400' : 'text-white'}`}>{value}</p>
+        {sub && <p className="text-xs text-slate-500 mt-0.5">{sub}</p>}
+      </div>
     </div>
   );
 }
 
-// ─── Load Table Row ───────────────────────────────────────────────────────────
+// ─── Custom Tooltip ───────────────────────────────────────────────────────────
 
-function LoadRow({ load }: { load: SonexLoad }) {
-  const STATUS_COLORS: Partial<Record<LoadStatus, string>> = {
-    delivered: 'text-emerald-400',
-    paid: 'text-green-400',
-    invoiced: 'text-violet-400',
-    pod_received: 'text-teal-400',
-  };
-  const color = STATUS_COLORS[load.status] ?? 'text-slate-400';
-
+const EarningsTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
   return (
-    <div className="grid grid-cols-[auto_1fr_auto] gap-x-3 gap-y-0.5 px-3 py-3 rounded-xl"
-      style={{ background: 'rgba(13,31,60,0.4)', border: '1px solid rgba(255,255,255,0.04)' }}>
-      {/* Col 1: Load # + date */}
-      <div className="flex flex-col">
-        <span className="font-mono text-amber-400 text-xs font-bold">{load.loadNumber}</span>
-        <span className="text-slate-600 text-[10px]">{fmtDate(load.pickupDate)}</span>
-      </div>
-      {/* Col 2: Route + commodity */}
-      <div className="flex flex-col min-w-0">
-        <div className="flex items-center gap-1 text-slate-300 text-xs truncate">
-          <span className="truncate">{load.pickupCity}, {load.pickupState}</span>
-          <ArrowRight size={10} className="flex-shrink-0 text-slate-600" />
-          <span className="truncate">{load.deliveryCity}, {load.deliveryState}</span>
-        </div>
-        <div className="flex items-center gap-2 mt-0.5">
-          <span className={`text-[10px] font-semibold ${color}`}>{LOAD_STATUS_LABELS[load.status]}</span>
-          <span className="text-slate-600 text-[10px]">{load.miles.toLocaleString()} mi</span>
-        </div>
-      </div>
-      {/* Col 3: financials */}
-      <div className="flex flex-col items-end">
-        <span className="text-amber-400 text-sm font-black font-mono">{fmt$(load.carrierNet)}</span>
-        <span className="text-slate-600 text-[10px]">of {fmt$(load.rate)}</span>
-        <span className="text-slate-700 text-[10px]">-{load.dispatchFeePercent}% fee</span>
-      </div>
+    <div className="bg-[#0D1F3C] border border-amber-500/20 rounded-xl px-3 py-2 text-xs shadow-xl">
+      <p className="text-slate-400 font-semibold mb-1">{label}</p>
+      {payload.map((p: any) => (
+        <p key={p.dataKey} className={p.dataKey === 'net' ? 'text-emerald-400' : 'text-amber-300'}>
+          {p.name}: {fmt$(p.value)}
+        </p>
+      ))}
     </div>
   );
-}
+};
 
 // ─── Settlement Row ───────────────────────────────────────────────────────────
 
@@ -159,7 +175,7 @@ function SettlementRow({ s, loads, carrierName }: { s: SonexSettlement; loads: S
       const tableBody = loads.map(l => [
         l.loadNumber,
         l.pickupDate,
-        `${l.pickupCity}, ${l.pickupState} -> ${l.deliveryCity}, ${l.deliveryState}`,
+        `${l.pickupCity}, ${l.pickupState} → ${l.deliveryCity}, ${l.deliveryState}`,
         `$${l.rate.toFixed(2)}`,
         `${l.dispatchFeePercent}%`,
         `$${l.dispatchFeeAmount.toFixed(2)}`,
@@ -218,7 +234,7 @@ function SettlementRow({ s, loads, carrierName }: { s: SonexSettlement; loads: S
   }
 
   return (
-    <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl"
+    <div className="flex items-center justify-between gap-3 px-4 py-3.5 rounded-xl"
       style={{ background: 'rgba(13,31,60,0.4)', border: '1px solid rgba(255,255,255,0.05)' }}>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5">
@@ -247,181 +263,315 @@ function SettlementRow({ s, loads, carrierName }: { s: SonexSettlement; loads: S
   );
 }
 
-// ─── Filter Pill ──────────────────────────────────────────────────────────────
-
-function FilterPill({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all whitespace-nowrap ${
-        active
-          ? 'bg-amber-500 text-black'
-          : 'text-slate-400 hover:text-white'
-      }`}
-      style={active ? {} : { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
-      {label}
-    </button>
-  );
-}
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function CarrierEarningsPage() {
   const { user } = useSonexAuth();
   const carrierId = user?.carrierId ?? '';
+
   const [allCompleted, setAllCompleted] = useState<SonexLoad[]>([]);
   const [settlements, setSettlements] = useState<SonexSettlement[]>([]);
-  const [filter, setFilter] = useState<FilterRange>('this_month');
-  const [showAll, setShowAll] = useState(false);
+  const [dateRange, setDateRange] = useState<FilterRange>('this_month');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
 
-  useEffect(() => {
+  // Sort state for table
+  const [loadSort, setLoadSort] = useState<{ col: string; dir: 'asc' | 'desc' }>({ col: 'pickupDate', dir: 'desc' });
+
+  const refresh = useCallback(async () => {
     if (!carrierId) return;
-    getLoadsByCarrier(carrierId).then(allLoads => {
+    try {
+      const allLoads = await getLoadsByCarrier(carrierId);
       const loads = allLoads.filter(l => COMPLETED.includes(l.status));
       loads.sort((a, b) => new Date(b.pickupDate).getTime() - new Date(a.pickupDate).getTime());
       setAllCompleted(loads);
-    });
-    getSettlements(carrierId).then(allSettlements => {
+
+      const allSettlements = await getSettlements(carrierId);
       setSettlements(allSettlements.sort(
         (a, b) => new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime()
       ));
-    });
+    } catch (e) {
+      console.error(e);
+    }
   }, [carrierId]);
 
-  // Lifetime totals
-  const lifetimeGross = useMemo(() => allCompleted.reduce((s, l) => s + l.rate, 0), [allCompleted]);
-  const lifetimeFees = useMemo(() => allCompleted.reduce((s, l) => s + l.dispatchFeeAmount, 0), [allCompleted]);
-  const lifetimeNet = useMemo(() => lifetimeGross - lifetimeFees, [lifetimeGross, lifetimeFees]);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
-  // Filtered loads
-  const filteredLoads = useMemo(() => filterLoads(allCompleted, filter), [allCompleted, filter]);
-  const filteredGross = filteredLoads.reduce((s, l) => s + l.rate, 0);
-  const filteredFees = filteredLoads.reduce((s, l) => s + l.dispatchFeeAmount, 0);
-  const filteredNet = filteredGross - filteredFees;
+  // Filter loads based on date selection
+  const filteredLoads = useMemo(() => {
+    return filterLoadsByRange(allCompleted, dateRange, customFrom, customTo);
+  }, [allCompleted, dateRange, customFrom, customTo]);
 
-  const displayedLoads = showAll ? filteredLoads : filteredLoads.slice(0, 8);
+  // Financial summaries
+  const totalGross = useMemo(() => filteredLoads.reduce((s, l) => s + l.rate, 0), [filteredLoads]);
+  const totalFees = useMemo(() => filteredLoads.reduce((s, l) => s + l.dispatchFeeAmount, 0), [filteredLoads]);
+  const totalNet = useMemo(() => totalGross - totalFees, [totalGross, totalFees]);
+  const totalMiles = useMemo(() => filteredLoads.reduce((s, l) => s + l.miles, 0), [filteredLoads]);
+  const avgRPM = useMemo(() => {
+    const loadsWithMiles = filteredLoads.filter(l => l.miles > 0);
+    return loadsWithMiles.length > 0 ? filteredLoads.reduce((s, l) => s + l.ratePerMile, 0) / loadsWithMiles.length : 0;
+  }, [filteredLoads]);
+
+  // Chart 1: Weekly earnings data (last 8 weeks)
+  const weeklyChartData = useMemo(() => buildWeeklyData(allCompleted), [allCompleted]);
+
+  // Chart 2: Earnings grouped by load lifecycle status
+  const statusChartData = useMemo(() => {
+    const statusGroup = new Map<string, { gross: number; net: number }>();
+    COMPLETED.forEach(st => {
+      statusGroup.set(st, { gross: 0, net: 0 });
+    });
+    filteredLoads.forEach(l => {
+      const key = l.status;
+      if (statusGroup.has(key)) {
+        const val = statusGroup.get(key)!;
+        val.gross += l.rate;
+        val.net += l.carrierNet;
+      }
+    });
+    return Array.from(statusGroup.entries()).map(([status, val]) => ({
+      name: LOAD_STATUS_LABELS[status as LoadStatus] || status,
+      Gross: Math.round(val.gross * 100) / 100,
+      Net: Math.round(val.net * 100) / 100,
+    }));
+  }, [filteredLoads]);
+
+  // Sort loads logic
+  const sortedLoads = useMemo(() => {
+    return [...filteredLoads].sort((a, b) => {
+      let av: string | number = a[loadSort.col as keyof SonexLoad] as string | number;
+      let bv: string | number = b[loadSort.col as keyof SonexLoad] as string | number;
+      if (typeof av === 'string' && typeof bv === 'string') {
+        return loadSort.dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+      }
+      return loadSort.dir === 'asc' ? (av as number) - (bv as number) : (bv as number) - (av as number);
+    });
+  }, [filteredLoads, loadSort]);
+
+  const toggleSort = (col: string) => {
+    setLoadSort(prev => prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'desc' });
+  };
+
+  const SortIcon = ({ col }: { col: string }) => {
+    if (loadSort.col !== col) return <span className="ml-1 text-slate-700">↕</span>;
+    return <span className="ml-1 text-amber-400">{loadSort.dir === 'asc' ? '↑' : '↓'}</span>;
+  };
+
+  // CSV Export for driver/carrier
+  const handleExportCSV = () => {
+    if (filteredLoads.length === 0) {
+      toast.error('No loads available to export');
+      return;
+    }
+    const headers = ['Load #', 'Pickup Date', 'Pickup City', 'Pickup State', 'Delivery City', 'Delivery State', 'Status', 'Miles', 'Gross Rate', 'Fee Amount', 'Net Pay', 'RPM'];
+    const rows = filteredLoads.map(l => [
+      l.loadNumber,
+      l.pickupDate,
+      l.pickupCity,
+      l.pickupState,
+      l.deliveryCity,
+      l.deliveryState,
+      l.status,
+      l.miles,
+      l.rate,
+      l.dispatchFeeAmount,
+      l.carrierNet,
+      l.ratePerMile
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(r => r.map(v => typeof v === 'string' && v.includes(',') ? `"${v}"` : v).join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `my-earnings-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('✓ CSV exported successfully!');
+  };
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-
+    <div className="max-w-6xl mx-auto px-4 py-6 space-y-6 animate-fade-in">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-black text-white tracking-tight">My Earnings</h1>
-        <p className="text-slate-500 text-sm mt-0.5">Transparent breakdown of your pay</p>
-      </div>
-
-      {/* Lifetime summary cards */}
-      <div>
-        <div className="text-xs text-slate-600 uppercase tracking-widest mb-2">Lifetime Totals</div>
-        <div className="grid grid-cols-3 gap-2">
-          <SummaryCard
-            label="Gross"
-            value={`$${(lifetimeGross / 1000).toFixed(1)}k`}
-            sub="From broker"
-            color="text-white"
-            icon={<TrendingUp size={14} className="text-slate-500" />}
-          />
-          <SummaryCard
-            label="Dispatch Fee"
-            value={`$${(lifetimeFees / 1000).toFixed(1)}k`}
-            sub="Transparent"
-            color="text-slate-400"
-            icon={<ChevronDown size={14} className="text-slate-600" />}
-          />
-          <SummaryCard
-            label="Net Paid"
-            value={`$${(lifetimeNet / 1000).toFixed(1)}k`}
-            sub="Your take"
-            color="text-amber-400"
-            icon={<DollarSign size={14} className="text-amber-500" />}
-          />
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-black text-white tracking-tight">Financial Reporting</h1>
+          <p className="text-slate-500 text-sm mt-0.5">Revenue, dispatch fees, and settlements analysis</p>
         </div>
+        <button
+          onClick={handleExportCSV}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 text-black font-semibold text-xs hover:bg-amber-400 transition-all active:scale-95 shrink-0"
+        >
+          <Download size={13} /> Export CSV
+        </button>
       </div>
 
-      {/* Filter row */}
-      <div>
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-          {(Object.keys(FILTER_LABELS) as FilterRange[]).map(r => (
-            <FilterPill
-              key={r}
-              active={filter === r}
-              label={FILTER_LABELS[r]}
-              onClick={() => { setFilter(r); setShowAll(false); }}
+      {/* Date Filter Row */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <select
+          value={dateRange}
+          onChange={e => setDateRange(e.target.value as FilterRange)}
+          className="px-3 py-2 text-xs bg-white/[0.05] border border-white/10 rounded-xl text-slate-300 focus:outline-none focus:border-amber-500/40 cursor-pointer"
+        >
+          <option value="all_time">All Time</option>
+          <option value="this_week">This Week</option>
+          <option value="this_month">This Month</option>
+          <option value="last_month">Last Month</option>
+          <option value="custom">Custom Range</option>
+        </select>
+        {dateRange === 'custom' && (
+          <>
+            <input
+              type="date"
+              value={customFrom}
+              onChange={e => setCustomFrom(e.target.value)}
+              className="px-3 py-1.5 text-xs bg-white/[0.05] border border-white/10 rounded-xl text-slate-300 focus:outline-none"
             />
-          ))}
+            <input
+              type="date"
+              value={customTo}
+              onChange={e => setCustomTo(e.target.value)}
+              className="px-3 py-1.5 text-xs bg-white/[0.05] border border-white/10 rounded-xl text-slate-300 focus:outline-none"
+            />
+          </>
+        )}
+        <span className="text-xs text-slate-500 ml-auto font-mono">{filteredLoads.length} loads</span>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <SummaryCard icon={DollarSign} label="Total Gross Revenue" value={fmt$(totalGross)} sub={`${filteredLoads.length} loads`} />
+        <SummaryCard icon={TrendingUp} label="Total Dispatch Fees" value={fmt$(totalFees)} sub={`${totalGross > 0 ? (totalFees / totalGross * 100).toFixed(1) : 0}% fee`} amber />
+        <SummaryCard icon={DollarSign} label="Total Net Pay" value={fmt$(totalNet)} sub="Your take-home" />
+        <SummaryCard icon={BarChart2} label="Average RPM" value={`$${avgRPM.toFixed(2)}/mi`} sub={`${totalMiles.toLocaleString()} total miles`} />
+      </div>
+
+      {/* Analytical Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Chart 1: Weekly Earning Trend */}
+        <div className="glass-card p-5">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Weekly Earnings (Last 8 Weeks)</p>
+          <div className="h-[200px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={weeklyChartData} barCategoryGap="25%">
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                <XAxis dataKey="week" tick={{ fill: '#64748B', fontSize: 9 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: '#64748B', fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+                <Tooltip content={<EarningsTooltip />} />
+                <Bar dataKey="gross" name="Gross Pay" fill="#F59E0B" radius={[4, 4, 0, 0]} opacity={0.65} />
+                <Bar dataKey="net" name="Net Pay" fill="#10B981" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Chart 2: Earnings by load lifecycle state */}
+        <div className="glass-card p-5">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Earnings by Load Status</p>
+          <div className="h-[200px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={statusChartData} barCategoryGap="25%">
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                <XAxis dataKey="name" tick={{ fill: '#64748B', fontSize: 9 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: '#64748B', fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={v => `$${v}`} />
+                <Tooltip content={<EarningsTooltip />} />
+                <Bar dataKey="Gross" fill="rgba(245,158,11,0.25)" stroke="#F59E0B" strokeWidth={0.8} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Net" fill="#10B981" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
 
-      {/* Filtered period summary */}
-      {filteredLoads.length > 0 && (
-        <div className="rounded-2xl px-4 py-4"
-          style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)' }}>
-          <div className="text-amber-400/60 text-[10px] uppercase tracking-widest mb-3">
-            {FILTER_LABELS[filter]} — {filteredLoads.length} Load{filteredLoads.length !== 1 ? 's' : ''}
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <div className="text-slate-500 text-xs mb-0.5">Gross</div>
-              <div className="text-white text-sm font-bold font-mono">{fmt$(filteredGross)}</div>
-            </div>
-            <div>
-              <div className="text-slate-500 text-xs mb-0.5">Fees</div>
-              <div className="text-slate-400 text-sm font-bold font-mono">-{fmt$(filteredFees)}</div>
-            </div>
-            <div>
-              <div className="text-amber-400/80 text-xs mb-0.5">Your Net</div>
-              <div className="text-amber-400 text-lg font-black font-mono">{fmt$(filteredNet)}</div>
-            </div>
-          </div>
+      {/* Tabular Load Breakdown */}
+      <div className="glass-card overflow-hidden">
+        <div className="px-5 py-4 border-b border-white/[0.06] flex items-center justify-between">
+          <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Load Breakdown</h2>
+          <span className="text-xs text-slate-500 font-mono">{filteredLoads.length} loads</span>
         </div>
-      )}
-
-      {/* Per-load breakdown */}
-      {filteredLoads.length > 0 ? (
-        <div>
-          <div className="text-xs text-slate-500 uppercase tracking-widest mb-3">Load Breakdown</div>
-          <div className="space-y-2">
-            {displayedLoads.map(load => <LoadRow key={load.id} load={load} />)}
+        {filteredLoads.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-white/[0.05]">
+                  {[
+                    { label: 'Load #', col: 'loadNumber' },
+                    { label: 'Date', col: 'pickupDate' },
+                    { label: 'Route', col: '' },
+                    { label: 'Status', col: 'status' },
+                    { label: 'Gross', col: 'rate' },
+                    { label: 'Fees', col: 'dispatchFeeAmount' },
+                    { label: 'Net Pay', col: 'carrierNet' },
+                    { label: 'RPM', col: 'ratePerMile' },
+                  ].map(({ label, col }) => (
+                    <th
+                      key={label}
+                      className={`px-4 py-3 text-[10px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap ${col ? 'cursor-pointer hover:text-slate-300' : ''}`}
+                      onClick={col ? () => toggleSort(col) : undefined}
+                    >
+                      {label}{col && <SortIcon col={col} />}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sortedLoads.map(load => {
+                  const statusColors: Record<string, string> = {
+                    delivered: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+                    paid: 'text-green-400 bg-green-500/10 border-green-500/20',
+                    invoiced: 'text-violet-400 bg-violet-500/10 border-violet-500/20',
+                    pod_received: 'text-teal-400 bg-teal-500/10 border-teal-500/20',
+                  };
+                  return (
+                    <tr key={load.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
+                      <td className="px-4 py-3.5 text-xs font-bold text-amber-400 font-mono">{load.loadNumber}</td>
+                      <td className="px-4 py-3.5 text-xs text-slate-400">{fmtDate(load.pickupDate)}</td>
+                      <td className="px-4 py-3.5 text-xs text-slate-200">
+                        {load.pickupCity}, {load.pickupState} → {load.deliveryCity}, {load.deliveryState}
+                        <div className="text-[10px] text-slate-500 mt-0.5">{load.miles.toLocaleString()} mi</div>
+                      </td>
+                      <td className="px-4 py-3.5 text-xs">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-semibold ${statusColors[load.status] || 'text-slate-400 bg-white/5 border-white/10'}`}>
+                          {LOAD_STATUS_LABELS[load.status] || load.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5 text-xs font-mono text-slate-300">{fmt$(load.rate)}</td>
+                      <td className="px-4 py-3.5 text-xs font-mono text-slate-500">
+                        -{fmt$(load.dispatchFeeAmount)}
+                        <span className="text-[10px] text-slate-600 block mt-0.5">{load.dispatchFeePercent}%</span>
+                      </td>
+                      <td className="px-4 py-3.5 text-xs font-bold font-mono text-amber-400">{fmt$(load.carrierNet)}</td>
+                      <td className="px-4 py-3.5 text-xs font-mono">
+                        <span className={load.ratePerMile >= 2.5 ? 'text-emerald-400' : load.ratePerMile >= 1.5 ? 'text-amber-400' : 'text-red-400'}>
+                          ${load.ratePerMile.toFixed(2)}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
+        ) : (
+          <div className="text-center py-10 text-slate-600 text-xs">
+            No completed loads found for this filter range.
+          </div>
+        )}
+      </div>
 
-          {/* Footer totals */}
-          {filteredLoads.length > 0 && (
-            <div className="mt-2 px-3 py-2.5 rounded-xl flex justify-between items-center"
-              style={{ background: 'rgba(13,31,60,0.7)', border: '1px solid rgba(255,255,255,0.08)' }}>
-              <span className="text-slate-500 text-xs font-semibold">
-                {filteredLoads.length} Load{filteredLoads.length !== 1 ? 's' : ''} Total
-              </span>
-              <span className="text-amber-400 font-black font-mono text-sm">{fmt$(filteredNet)}</span>
-            </div>
-          )}
-
-          {filteredLoads.length > 8 && (
-            <button
-              onClick={() => setShowAll(!showAll)}
-              className="mt-2 w-full py-2.5 rounded-xl text-xs text-slate-400 hover:text-white transition-colors"
-              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
-              {showAll ? `Show less` : `Show all ${filteredLoads.length} loads`}
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="text-center py-10 text-slate-600 text-sm">
-          No completed loads for {FILTER_LABELS[filter].toLowerCase()}.
-        </div>
-      )}
-
-      {/* Settlements */}
+      {/* Settlements History */}
       {settlements.length > 0 && (
-        <div>
-          <div className="flex items-center gap-2 mb-3">
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
             <FileDown size={15} className="text-amber-500/60" />
-            <h2 className="text-base font-bold text-white">Settlement History</h2>
+            <h2 className="text-sm font-bold text-white uppercase tracking-widest">Settlement Statements</h2>
           </div>
-          <div className="space-y-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {settlements.map(s => (
-              <SettlementRow 
-                key={s.id} 
-                s={s} 
+              <SettlementRow
+                key={s.id}
+                s={s}
                 loads={allCompleted.filter(l => s.loadIds.includes(l.id))}
                 carrierName={user?.displayName || 'Carrier'}
               />

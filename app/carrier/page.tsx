@@ -6,12 +6,14 @@ import {
   AlertTriangle, Clock, Weight, DollarSign, Building2, Timer,
   Moon, Zap, XCircle, PhoneCall, ChevronDown, RefreshCw, Plus,
   Image as ImageIcon, FileText, Trash2, Eye, Navigation, AlertOctagon, Wrench,
+  Sparkles, UploadCloud, Loader2, X
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useSonexAuth } from '@/lib/sonexAuth';
+import { FuelPriceWidget } from '@/components/sonex/FuelPriceWidget';
 import {
   getLoadsByCarrier, getCheckins, addCheckin, updateLoad,
-  addCargoPhoto, getCargoPhotos,
+  addCargoPhoto, getCargoPhotos, addLoad, getCarrier,
 } from '@/lib/sonexStore';
 import { uploadFile, uploadFiles } from '@/lib/storageUtils';
 import type { SonexLoad, SonexLoadCheckin, SonexCargoPhoto, CheckinEvent, LoadStatus, SonexCarrier } from '@/lib/sonexTypes';
@@ -75,7 +77,7 @@ const CHECKIN_CONFIGS: Record<CheckinEvent, {
   Icon: React.ElementType; color: string; bg: string; border: string;
 }> = {
   arrived_pickup:   { label: 'Arrived at Pickup',  Icon: Truck,        color: 'text-black', bg: 'bg-amber-500 hover:bg-amber-400',   border: 'border-amber-400' },
-  loaded_departing: { label: 'Loaded â€” Departing', Icon: PackageCheck, color: 'text-black', bg: 'bg-amber-500 hover:bg-amber-400',   border: 'border-amber-400' },
+  loaded_departing: { label: 'Loaded — Departing', Icon: PackageCheck, color: 'text-black', bg: 'bg-amber-500 hover:bg-amber-400',   border: 'border-amber-400' },
   arrived_delivery: { label: 'Arrived at Delivery',Icon: MapPin,       color: 'text-black', bg: 'bg-amber-500 hover:bg-amber-400',   border: 'border-amber-400' },
   delivered:        { label: 'Mark as Delivered',  Icon: CheckCircle,  color: 'text-white', bg: 'bg-emerald-600 hover:bg-emerald-500',border: 'border-emerald-500' },
   detention_start:  { label: 'Start Detention',    subLabel: 'Waiting at facility', Icon: Timer, color: 'text-black', bg: 'bg-orange-500 hover:bg-orange-400', border: 'border-orange-400' },
@@ -269,7 +271,7 @@ function NotesModal({ event, onConfirm, onCancel, loading }: NotesModalProps) {
           <textarea
             value={notes}
             onChange={e => setNotes(e.target.value)}
-            placeholder="Add any details about this eventâ€¦"
+            placeholder="Add any details about this event..."
             rows={3}
             className="w-full rounded-xl px-4 py-3 text-sm text-white placeholder-slate-600 resize-none focus:outline-none"
             style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
@@ -282,7 +284,7 @@ function NotesModal({ event, onConfirm, onCancel, loading }: NotesModalProps) {
             </button>
             <button onClick={() => onConfirm(notes)} disabled={loading}
               className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all bg-amber-500 text-black hover:bg-amber-400 ${loading ? 'opacity-60 cursor-not-allowed' : ''}`}>
-              {loading ? 'Loggingâ€¦' : 'Confirm'}
+              {loading ? 'Logging...' : 'Confirm'}
             </button>
           </div>
         </div>
@@ -297,7 +299,7 @@ function PhotoGrid({ photos, label }: { photos: SonexCargoPhoto[]; label: string
   if (!photos.length) return null;
   return (
     <div className="mt-2">
-      <div className="text-[10px] text-slate-600 uppercase tracking-widest mb-1.5">{label} â€” {photos.length} photo{photos.length !== 1 ? 's' : ''}</div>
+      <div className="text-[10px] text-slate-600 uppercase tracking-widest mb-1.5">{label} — {photos.length} photo{photos.length !== 1 ? 's' : ''}</div>
       <div className="flex flex-wrap gap-1.5">
         {photos.map(p => (
           <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer"
@@ -350,7 +352,7 @@ function UploadSlotCard({ slot, load, photos, doneEvents, onRefresh, carrierId }
           (updateData as any).status = slot.advancesStatus;
         }
         await updateLoad(load.id, updateData as any);
-        toast.success(`âœ“ ${slot.label} uploaded!`);
+        toast.success(`✓ ${slot.label} uploaded!`);
       } else {
         // Photo(s) upload â€” store as cargo photos
         const results = await uploadFiles(files, 'cargo-photos', `${load.id}`);
@@ -413,7 +415,7 @@ function UploadSlotCard({ slot, load, photos, doneEvents, onRefresh, carrierId }
           )}
           {docUrl && (
             <div className="text-[10px] text-emerald-400 mt-1 flex items-center gap-1">
-              <CheckCircle size={9} /> Uploaded âœ“
+              <CheckCircle size={9} /> Uploaded ✓
             </div>
           )}
           {!unlocked && (
@@ -532,7 +534,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
       };
       if (statusMap[event]) await updateLoad(load.id, { status: statusMap[event] });
 
-      toast.success(`âœ“ ${CHECKIN_EVENT_LABELS[event]} logged!`, {
+      toast.success(`✓ ${CHECKIN_EVENT_LABELS[event]} logged!`, {
         style: { background: '#0D1F3C', color: '#FCD34D', border: '1px solid rgba(245,158,11,0.3)' },
       });
       await refreshDetail();
@@ -611,10 +613,10 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
               <div className="flex justify-between items-start gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="text-white font-semibold text-sm leading-snug">{load.pickupCity}, {load.pickupState}</div>
-                  <div className="text-slate-400 text-xs mt-0.5 truncate">{load.pickupFacility} {load.pickupAddress && `Â· ${load.pickupAddress}`}</div>
+                  <div className="text-slate-400 text-xs mt-0.5 truncate">{load.pickupFacility} {load.pickupAddress && ` · ${load.pickupAddress}`}</div>
                   <div className="text-slate-500 text-[11px] mt-0.5 flex items-center gap-1">
-                    <Clock size={11} />{fmtDate(load.pickupDate)} Â· {fmtTime(load.pickupTime)}
-                    {load.pickupApptNumber && <span className="text-amber-500/70">Â· Appt #{load.pickupApptNumber}</span>}
+                    <Clock size={11} />{fmtDate(load.pickupDate)} · {fmtTime(load.pickupTime)}
+                    {load.pickupApptNumber && <span className="text-amber-500/70"> · Appt #{load.pickupApptNumber}</span>}
                   </div>
                 </div>
                 <a href={`geo:0,0?q=${encodeURIComponent(`${load.pickupFacility} ${load.pickupAddress || ''} ${load.pickupCity} ${load.pickupState} ${load.pickupZip || ''}`)}(${encodeURIComponent(load.pickupFacility.replace(/[()]/g, ''))})`}
@@ -644,7 +646,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
             <div className="rounded-xl px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
               <div className="text-slate-500 text-[10px] uppercase tracking-widest flex items-center gap-1 mb-0.5"><Weight size={10} />Cargo</div>
               <div className="text-white text-sm font-medium truncate">{load.commodity}</div>
-              <div className="text-slate-400 text-xs">{load.weight.toLocaleString()} lbs Â· {load.miles.toLocaleString()} mi</div>
+              <div className="text-slate-400 text-xs">{load.weight.toLocaleString()} lbs · {load.miles.toLocaleString()} mi</div>
             </div>
             <div className="rounded-xl px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
               <div className="text-slate-500 text-[10px] uppercase tracking-widest flex items-center gap-1 mb-0.5"><Building2 size={10} />Broker</div>
@@ -657,7 +659,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
           <div className="mt-3 rounded-xl px-4 py-3" style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)' }}>
             <div className="flex items-center justify-between">
               <div><div className="text-slate-400 text-xs mb-0.5">Gross</div><div className="text-slate-300 text-sm font-mono">{fmt$(load.rate)}</div></div>
-              <div className="text-slate-600 text-sm">âˆ’</div>
+              <div className="text-slate-600 text-sm">-</div>
               <div><div className="text-slate-400 text-xs mb-0.5">Fee ({load.dispatchFeePercent}%)</div><div className="text-slate-400 text-sm font-mono">{fmt$(load.dispatchFeeAmount)}</div></div>
               <div className="text-amber-500/60 text-sm">=</div>
               <div className="text-right"><div className="text-amber-400/80 text-xs mb-0.5">Your Net</div><div className="text-amber-400 text-xl font-black font-mono">{fmt$(load.carrierNet)}</div></div>
@@ -764,13 +766,13 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
                   className={`w-full rounded-2xl font-bold text-lg flex items-center justify-center gap-3 transition-all active:scale-[0.98] ${CHECKIN_CONFIGS[nextEvent].bg} ${CHECKIN_CONFIGS[nextEvent].color} ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
                   style={{ height: '60px', border: '1px solid', borderColor: CHECKIN_CONFIGS[nextEvent].border.replace('border-', ''), boxShadow: '0 4px 20px rgba(245,158,11,0.15)' }}>
                   {React.createElement(CHECKIN_CONFIGS[nextEvent].Icon, { size: 22 })}
-                  {loading ? 'Loggingâ€¦' : CHECKIN_CONFIGS[nextEvent].label}
+                  {loading ? 'Logging...' : CHECKIN_CONFIGS[nextEvent].label}
                 </button>
               )}
               {!nextEvent && doneEvents.has('delivered') && (
                 <div className="w-full rounded-2xl flex items-center justify-center gap-2 py-4 text-emerald-400 font-semibold"
                   style={{ background: 'rgba(16,185,129,0.10)', border: '1px solid rgba(16,185,129,0.25)' }}>
-                  <CheckCircle size={20} /> All check-ins complete â€” great job!
+                  <CheckCircle size={20} /> All check-ins complete — great job!
                 </div>
               )}
 
@@ -780,7 +782,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
                   <button onClick={() => setShowOtherEvents(v => !v)}
                     className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs text-slate-400 hover:text-slate-300 transition-colors"
                     style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <span className="font-semibold">Log: Detention Â· Layover Â· TONU Â· Breakdown Â· Accident</span>
+                    <span className="font-semibold">Log: Detention · Layover · TONU · Breakdown · Accident</span>
                     <ChevronDown size={14} className={`transition-transform ${showOtherEvents ? 'rotate-180' : ''}`} />
                   </button>
                   {showOtherEvents && (
@@ -832,7 +834,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
                   </div>
                   <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Pickup Documents</span>
                   {!doneEvents.has('arrived_pickup') && (
-                    <span className="text-[10px] text-slate-600 italic">â€” Unlocks after "Arrived at Pickup"</span>
+                    <span className="text-[10px] text-slate-600 italic">— Unlocks after "Arrived at Pickup"</span>
                   )}
                 </div>
                 <div className="space-y-2">
@@ -854,7 +856,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
                   </div>
                   <span className="text-xs font-bold text-emerald-400 uppercase tracking-widest">Delivery Documents</span>
                   {!doneEvents.has('arrived_delivery') && (
-                    <span className="text-[10px] text-slate-600 italic">â€” Unlocks after "Arrived at Delivery"</span>
+                    <span className="text-[10px] text-slate-600 italic">— Unlocks after "Arrived at Delivery"</span>
                   )}
                 </div>
                 <div className="space-y-2">
@@ -887,9 +889,9 @@ function PastLoadRow({ load }: { load: SonexLoad }) {
           <StatusBadge status={load.status} />
         </div>
         <div className="text-slate-300 text-xs truncate">
-          {load.pickupCity}, {load.pickupState} â†’ {load.deliveryCity}, {load.deliveryState}
+          {load.pickupCity}, {load.pickupState} → {load.deliveryCity}, {load.deliveryState}
         </div>
-        <div className="text-slate-500 text-xs mt-0.5">{fmtDate(load.pickupDate)} Â· {load.miles.toLocaleString()} mi</div>
+        <div className="text-slate-500 text-xs mt-0.5">{fmtDate(load.pickupDate)} · {load.miles.toLocaleString()} mi</div>
       </div>
       <div className="text-right flex-shrink-0">
         <div className="text-slate-400 text-xs">Gross: <span className="text-slate-300 font-mono">{fmt$(load.rate)}</span></div>
@@ -938,14 +940,86 @@ export default function CarrierLoadsPage() {
     }
   }, [carrierId, loads.length]);
 
+  const activeLoad = loads.find(l => ACTIVE_STATUSES.includes(l.status));
+  const pastLoads = loads.filter(l => COMPLETED_STATUSES.includes(l.status));
+
   useEffect(() => {
     refresh();
     const interval = setInterval(refresh, 8000);
     return () => clearInterval(interval);
   }, [refresh]);
 
-  const activeLoad = loads.find(l => ACTIVE_STATUSES.includes(l.status));
-  const pastLoads = loads.filter(l => COMPLETED_STATUSES.includes(l.status));
+  // AI Rate Confirmation Parser State
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [parsing, setParsing] = useState(false);
+  const [parsingStep, setParsingStep] = useState('');
+  const [parsedData, setParsedData] = useState<any>(null);
+  const [carrierFee, setCarrierFee] = useState(10);
+  const aiFileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (carrierId) {
+      getCarrier(carrierId).then(c => {
+        if (c) setCarrierFee(c.dispatchFeePercent);
+      });
+    }
+  }, [carrierId]);
+
+  const handleAiUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setParsing(true);
+    setParsingStep('Scanning document...');
+    
+    await new Promise(r => setTimeout(r, 700));
+    setParsingStep('Analyzing logistics routing...');
+    await new Promise(r => setTimeout(r, 700));
+    setParsingStep('Extracting financial rate and details...');
+    await new Promise(r => setTimeout(r, 700));
+
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      
+      const res = await fetch('/api/parse-rc', {
+        method: 'POST',
+        body: fd
+      });
+      
+      const json = await res.json();
+      if (json.success) {
+        setParsedData(json.data);
+      } else {
+        toast.error(json.error || 'Failed to parse Rate Confirmation');
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Error connecting to document parser');
+    } finally {
+      setParsing(false);
+      if (aiFileRef.current) aiFileRef.current.value = '';
+    }
+  };
+
+  const handleConfirmAiLoad = async () => {
+    if (!parsedData) return;
+    try {
+      await addLoad({
+        ...parsedData,
+        carrierId,
+        dispatchFeePercent: carrierFee,
+        status: 'booked'
+      });
+      toast.success('✓ Load created and added to assignments!');
+      setShowAiModal(false);
+      setParsedData(null);
+      refresh();
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Failed to create load: ' + (err?.message || err));
+    }
+  };
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
@@ -954,11 +1028,21 @@ export default function CarrierLoadsPage() {
           <h1 className="text-xl font-black text-white tracking-tight">My Loads</h1>
           <p className="text-slate-500 text-sm mt-0.5">Active assignment and history</p>
         </div>
-        <a href="tel:(346)421-2681" 
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-all shrink-0 tracking-wide uppercase">
-          <AlertOctagon size={13} className="animate-pulse" />
-          SOS Support
-        </a>
+        <div className="flex items-center gap-2">
+          {/* AI Parsing Button */}
+          <button
+            onClick={() => setShowAiModal(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black text-amber-400 bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 transition-all shrink-0 tracking-wide uppercase"
+          >
+            <Sparkles size={13} />
+            AI Parse RC
+          </button>
+          <a href="tel:(346)421-2681" 
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-all shrink-0 tracking-wide uppercase">
+            <AlertOctagon size={13} className="animate-pulse" />
+            SOS Support
+          </a>
+        </div>
       </div>
 
       {!carrierId ? (
@@ -1002,6 +1086,199 @@ export default function CarrierLoadsPage() {
           </div>
         </div>
       )}
+
+      {/* Fuel Pricing Widget */}
+      <FuelPriceWidget />
+
+      {/* AI Parsing Modal */}
+      {showAiModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh]" style={{ background: '#0D1421', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles size={16} className="text-amber-400" />
+                <span className="text-white font-bold text-sm">AI Rate Confirmation Parser</span>
+              </div>
+              <button onClick={() => { setShowAiModal(false); setParsedData(null); }} className="text-slate-400 hover:text-white">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto space-y-4 flex-1">
+              {parsing ? (
+                <div className="flex flex-col items-center justify-center py-10 space-y-3">
+                  <Loader2 size={32} className="text-amber-500 animate-spin" />
+                  <p className="text-white text-sm font-semibold">{parsingStep}</p>
+                  <p className="text-slate-500 text-xs">AI is reading the Rate Confirmation details...</p>
+                </div>
+              ) : !parsedData ? (
+                <div 
+                  onClick={() => aiFileRef.current?.click()}
+                  className="border border-dashed border-white/10 rounded-2xl p-8 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-white/[0.02] hover:border-amber-500/30 transition-all space-y-3"
+                >
+                  <div className="w-12 h-12 rounded-full bg-white/[0.03] flex items-center justify-center">
+                    <UploadCloud size={20} className="text-slate-400" />
+                  </div>
+                  <div>
+                    <p className="text-white text-sm font-semibold">Upload Rate Confirmation</p>
+                    <p className="text-slate-500 text-xs mt-1">Select or drag & drop PDF/image files here</p>
+                  </div>
+                  <span className="text-[10px] text-amber-500/80 bg-amber-500/10 px-2.5 py-1 rounded-full font-bold tracking-wider uppercase">
+                    Scan Document
+                  </span>
+                </div>
+              ) : (
+                <div className="space-y-4 text-left">
+                  <div className="text-xs text-amber-400/80 bg-amber-500/10 px-3 py-2 rounded-xl border border-amber-500/20 leading-relaxed">
+                    <strong>✓ Document scanned!</strong> Please review and adjust the extracted details before confirming load creation.
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Broker Name</label>
+                        <input type="text" value={parsedData.brokerName} onChange={e => setParsedData({ ...parsedData, brokerName: e.target.value })}
+                          className="w-full rounded-xl px-3 py-2 bg-white/5 border border-white/10 text-white text-xs focus:outline-none focus:border-amber-500/30" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Broker MC</label>
+                        <input type="text" value={parsedData.brokerMC} onChange={e => setParsedData({ ...parsedData, brokerMC: e.target.value })}
+                          className="w-full rounded-xl px-3 py-2 bg-white/5 border border-white/10 text-white text-xs focus:outline-none focus:border-amber-500/30" />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Broker Contact</label>
+                        <input type="text" value={parsedData.brokerContact} onChange={e => setParsedData({ ...parsedData, brokerContact: e.target.value })}
+                          className="w-full rounded-xl px-3 py-2 bg-white/5 border border-white/10 text-white text-xs focus:outline-none" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Broker Phone</label>
+                        <input type="text" value={parsedData.brokerPhone} onChange={e => setParsedData({ ...parsedData, brokerPhone: e.target.value })}
+                          className="w-full rounded-xl px-3 py-2 bg-white/5 border border-white/10 text-white text-xs focus:outline-none" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Broker Email</label>
+                        <input type="text" value={parsedData.brokerEmail} onChange={e => setParsedData({ ...parsedData, brokerEmail: e.target.value })}
+                          className="w-full rounded-xl px-3 py-2 bg-white/5 border border-white/10 text-white text-xs focus:outline-none" />
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded-xl border border-white/[0.04] bg-white/[0.01] space-y-2.5">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-white/5 pb-1">Pickup Info</div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="col-span-2">
+                          <label className="block text-[9px] font-semibold text-slate-500 uppercase mb-0.5">Facility Name</label>
+                          <input type="text" value={parsedData.pickupFacility} onChange={e => setParsedData({ ...parsedData, pickupFacility: e.target.value })}
+                            className="w-full rounded-lg px-2.5 py-1.5 bg-white/5 border border-white/10 text-white text-xs" />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-semibold text-slate-500 uppercase mb-0.5">Pickup Date</label>
+                          <input type="date" value={parsedData.pickupDate} onChange={e => setParsedData({ ...parsedData, pickupDate: e.target.value })}
+                            className="w-full rounded-lg px-2.5 py-1.5 bg-white/5 border border-white/10 text-white text-xs" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-4 gap-2">
+                        <div className="col-span-2">
+                          <label className="block text-[9px] font-semibold text-slate-500 uppercase mb-0.5">Address</label>
+                          <input type="text" value={parsedData.pickupAddress} onChange={e => setParsedData({ ...parsedData, pickupAddress: e.target.value })}
+                            className="w-full rounded-lg px-2.5 py-1.5 bg-white/5 border border-white/10 text-white text-xs" />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-semibold text-slate-500 uppercase mb-0.5">City</label>
+                          <input type="text" value={parsedData.pickupCity} onChange={e => setParsedData({ ...parsedData, pickupCity: e.target.value })}
+                            className="w-full rounded-lg px-2.5 py-1.5 bg-white/5 border border-white/10 text-white text-xs" />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-semibold text-slate-500 uppercase mb-0.5">State</label>
+                          <input type="text" value={parsedData.pickupState} onChange={e => setParsedData({ ...parsedData, pickupState: e.target.value })}
+                            className="w-full rounded-lg px-2.5 py-1.5 bg-white/5 border border-white/10 text-white text-xs" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded-xl border border-white/[0.04] bg-white/[0.01] space-y-2.5">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-white/5 pb-1">Delivery Info</div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="col-span-2">
+                          <label className="block text-[9px] font-semibold text-slate-500 uppercase mb-0.5">Facility Name</label>
+                          <input type="text" value={parsedData.deliveryFacility} onChange={e => setParsedData({ ...parsedData, deliveryFacility: e.target.value })}
+                            className="w-full rounded-lg px-2.5 py-1.5 bg-white/5 border border-white/10 text-white text-xs" />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-semibold text-slate-500 uppercase mb-0.5">Delivery Date</label>
+                          <input type="date" value={parsedData.deliveryDate} onChange={e => setParsedData({ ...parsedData, deliveryDate: e.target.value })}
+                            className="w-full rounded-lg px-2.5 py-1.5 bg-white/5 border border-white/10 text-white text-xs" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-4 gap-2">
+                        <div className="col-span-2">
+                          <label className="block text-[9px] font-semibold text-slate-500 uppercase mb-0.5">Address</label>
+                          <input type="text" value={parsedData.deliveryAddress} onChange={e => setParsedData({ ...parsedData, deliveryAddress: e.target.value })}
+                            className="w-full rounded-lg px-2.5 py-1.5 bg-white/5 border border-white/10 text-white text-xs" />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-semibold text-slate-500 uppercase mb-0.5">City</label>
+                          <input type="text" value={parsedData.deliveryCity} onChange={e => setParsedData({ ...parsedData, deliveryCity: e.target.value })}
+                            className="w-full rounded-lg px-2.5 py-1.5 bg-white/5 border border-white/10 text-white text-xs" />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-semibold text-slate-500 uppercase mb-0.5">State</label>
+                          <input type="text" value={parsedData.deliveryState} onChange={e => setParsedData({ ...parsedData, deliveryState: e.target.value })}
+                            className="w-full rounded-lg px-2.5 py-1.5 bg-white/5 border border-white/10 text-white text-xs" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Commodity</label>
+                        <input type="text" value={parsedData.commodity} onChange={e => setParsedData({ ...parsedData, commodity: e.target.value })}
+                          className="w-full rounded-xl px-3 py-2 bg-white/5 border border-white/10 text-white text-xs focus:outline-none" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Weight (lbs)</label>
+                        <input type="number" value={parsedData.weight} onChange={e => setParsedData({ ...parsedData, weight: Number(e.target.value) })}
+                          className="w-full rounded-xl px-3 py-2 bg-white/5 border border-white/10 text-white text-xs focus:outline-none" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Miles</label>
+                        <input type="number" value={parsedData.miles} onChange={e => setParsedData({ ...parsedData, miles: Number(e.target.value) })}
+                          className="w-full rounded-xl px-3 py-2 bg-white/5 border border-white/10 text-white text-xs focus:outline-none" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Rate ($)</label>
+                        <input type="number" value={parsedData.rate} onChange={e => setParsedData({ ...parsedData, rate: Number(e.target.value) })}
+                          className="w-full rounded-xl px-3 py-2 bg-white/5 border border-white/10 text-white text-xs focus:outline-none" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="px-5 py-4 border-t border-white/5 flex justify-end gap-2 shrink-0">
+              <button 
+                onClick={() => { setShowAiModal(false); setParsedData(null); }}
+                className="px-4 py-2.5 rounded-xl text-xs text-slate-400"
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+              >
+                Cancel
+              </button>
+              {parsedData && (
+                <button 
+                  onClick={handleConfirmAiLoad}
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-amber-500 text-black hover:bg-amber-400 transition-all active:scale-95"
+                >
+                  Confirm & Create Load
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      <input ref={aiFileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={handleAiUpload} />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -109,7 +109,7 @@ export default function SonexDashboardPage() {
             <h1 className="font-display text-xl font-extrabold text-white">Sonex Dispatch</h1>
             <p className="mt-0.5 text-sm text-slate-400">
               {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-              {' Â· '}
+              {' \u00B7 '}
               {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
             </p>
           </div>

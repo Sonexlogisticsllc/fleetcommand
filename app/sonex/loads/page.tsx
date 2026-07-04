@@ -28,6 +28,17 @@ function fmt$(n: number) {
   return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// ─── Section Helper ───────────────────────────────────────────────────────────
+
+const Section = ({ title, children, cols = 2 }: { title: string; children: React.ReactNode; cols?: number }) => (
+  <div>
+    <div className="text-[10px] font-semibold text-amber-400/80 uppercase tracking-wider mb-3 pb-1.5 border-b border-white/[0.06]">
+      {title}
+    </div>
+    <div className={`grid grid-cols-${cols} gap-3`}>{children}</div>
+  </div>
+);
+
 // ─── New Load Modal ───────────────────────────────────────────────────────────
 
 interface NewLoadModalProps {
@@ -94,14 +105,6 @@ function NewLoadModal({ carriers, onClose, onSaved }: NewLoadModalProps) {
     </div>
   );
 
-  const Section = ({ title, children, cols = 2 }: { title: string; children: React.ReactNode; cols?: number }) => (
-    <div>
-      <div className="text-[10px] font-semibold text-amber-400/80 uppercase tracking-wider mb-3 pb-1.5 border-b border-white/[0.06]">
-        {title}
-      </div>
-      <div className={`grid grid-cols-${cols} gap-3`}>{children}</div>
-    </div>
-  );
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
