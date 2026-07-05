@@ -988,13 +988,9 @@ export default function CarrierLoadsPage() {
     return () => clearInterval(interval);
   }, [refresh]);
 
-  // AI Rate Confirmation Parser State
-  const [showAiModal, setShowAiModal] = useState(false);
-  const [parsing, setParsing] = useState(false);
-  const [parsingStep, setParsingStep] = useState('');
-  const [parsedData, setParsedData] = useState<any>(null);
+  // Manual Add Load Modal State
+  const [showManualModal, setShowManualModal] = useState(false);
   const [carrierFee, setCarrierFee] = useState(10);
-  const aiFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (carrierId) {
@@ -1004,62 +1000,6 @@ export default function CarrierLoadsPage() {
     }
   }, [carrierId]);
 
-  const handleAiUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setParsing(true);
-    setParsingStep('Scanning document...');
-    
-    await new Promise(r => setTimeout(r, 700));
-    setParsingStep('Analyzing logistics routing...');
-    await new Promise(r => setTimeout(r, 700));
-    setParsingStep('Extracting financial rate and details...');
-    await new Promise(r => setTimeout(r, 700));
-
-    try {
-      const fd = new FormData();
-      fd.append('file', file);
-      
-      const res = await fetch('/api/parse-rc', {
-        method: 'POST',
-        body: fd
-      });
-      
-      const json = await res.json();
-      if (json.success) {
-        setParsedData(json.data);
-      } else {
-        toast.error(json.error || 'Failed to parse Rate Confirmation');
-      }
-    } catch (err: any) {
-      console.error(err);
-      toast.error('Error connecting to document parser');
-    } finally {
-      setParsing(false);
-      if (aiFileRef.current) aiFileRef.current.value = '';
-    }
-  };
-
-  const handleConfirmAiLoad = async () => {
-    if (!parsedData) return;
-    try {
-      await addLoad({
-        ...parsedData,
-        carrierId,
-        dispatchFeePercent: carrierFee,
-        status: 'booked'
-      });
-      toast.success('✓ Load created and added to assignments!');
-      setShowAiModal(false);
-      setParsedData(null);
-      refresh();
-    } catch (err: any) {
-      console.error(err);
-      toast.error('Failed to create load: ' + (err?.message || err));
-    }
-  };
-
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
       <div className="flex items-center justify-between gap-4">
@@ -1068,13 +1008,13 @@ export default function CarrierLoadsPage() {
           <p className="text-slate-500 text-sm mt-0.5">Active assignment and history</p>
         </div>
         <div className="flex items-center gap-2">
-          {/* AI Parsing Button */}
+          {/* Manual Add Load Button */}
           <button
-            onClick={() => setShowAiModal(true)}
+            onClick={() => setShowManualModal(true)}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black text-amber-400 bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 transition-all shrink-0 tracking-wide uppercase"
           >
-            <Sparkles size={13} />
-            AI Parse RC
+            <Plus size={13} />
+            Add Load Manually
           </button>
           <a href="tel:(346)421-2681" 
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-all shrink-0 tracking-wide uppercase">
@@ -1129,195 +1069,186 @@ export default function CarrierLoadsPage() {
       {/* Fuel Pricing Widget */}
       <FuelPriceWidget />
 
-      {/* AI Parsing Modal */}
-      {showAiModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh]" style={{ background: '#0D1421', border: '1px solid rgba(255,255,255,0.1)' }}>
-            <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Sparkles size={16} className="text-amber-400" />
-                <span className="text-white font-bold text-sm">AI Rate Confirmation Parser</span>
-              </div>
-              <button onClick={() => { setShowAiModal(false); setParsedData(null); }} className="text-slate-400 hover:text-white">
-                <X size={16} />
-              </button>
-            </div>
+      {/* Manual Add Load Modal */}
+      {showManualModal && (
+        <NewCarrierLoadModal
+          carrierId={carrierId}
+          carrierFee={carrierFee}
+          onClose={() => setShowManualModal(false)}
+          onSaved={refresh}
+      )}
+    </div>
+  );
+}
 
-            <div className="p-5 overflow-y-auto space-y-4 flex-1">
-              {parsing ? (
-                <div className="flex flex-col items-center justify-center py-10 space-y-3">
-                  <Loader2 size={32} className="text-amber-500 animate-spin" />
-                  <p className="text-white text-sm font-semibold">{parsingStep}</p>
-                  <p className="text-slate-500 text-xs">AI is reading the Rate Confirmation details...</p>
-                </div>
-              ) : !parsedData ? (
-                <div 
-                  onClick={() => aiFileRef.current?.click()}
-                  className="border border-dashed border-white/10 rounded-2xl p-8 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-white/[0.02] hover:border-amber-500/30 transition-all space-y-3"
-                >
-                  <div className="w-12 h-12 rounded-full bg-white/[0.03] flex items-center justify-center">
-                    <UploadCloud size={20} className="text-slate-400" />
-                  </div>
-                  <div>
-                    <p className="text-white text-sm font-semibold">Upload Rate Confirmation</p>
-                    <p className="text-slate-500 text-xs mt-1">Select or drag & drop PDF/image files here</p>
-                  </div>
-                  <span className="text-[10px] text-amber-500/80 bg-amber-500/10 px-2.5 py-1 rounded-full font-bold tracking-wider uppercase">
-                    Scan Document
-                  </span>
-                </div>
-              ) : (
-                <div className="space-y-4 text-left">
-                  <div className="text-xs text-amber-400/80 bg-amber-500/10 px-3 py-2 rounded-xl border border-amber-500/20 leading-relaxed">
-                    <strong>✓ Document scanned!</strong> Please review and adjust the extracted details before confirming load creation.
-                  </div>
+interface NewCarrierLoadModalProps {
+  carrierId: string;
+  carrierFee: number;
+  onClose: () => void;
+  onSaved: () => void;
+}
 
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Broker Name</label>
-                        <input type="text" value={parsedData.brokerName} onChange={e => setParsedData({ ...parsedData, brokerName: e.target.value })}
-                          className="w-full rounded-xl px-3 py-2 bg-white/5 border border-white/10 text-white text-xs focus:outline-none focus:border-amber-500/30" />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Broker MC</label>
-                        <input type="text" value={parsedData.brokerMC} onChange={e => setParsedData({ ...parsedData, brokerMC: e.target.value })}
-                          className="w-full rounded-xl px-3 py-2 bg-white/5 border border-white/10 text-white text-xs focus:outline-none focus:border-amber-500/30" />
-                      </div>
-                    </div>
+function NewCarrierLoadModal({ carrierId, carrierFee, onClose, onSaved }: NewCarrierLoadModalProps) {
+  const [form, setForm] = useState({
+    // Broker
+    brokerName: '', brokerContact: '', brokerPhone: '', brokerEmail: '', brokerMC: '',
+    // Pickup
+    pickupFacility: '', pickupAddress: '', pickupCity: '', pickupState: '', pickupZip: '',
+    pickupDate: '', pickupTime: '08:00', pickupApptNumber: '',
+    // Delivery
+    deliveryFacility: '', deliveryAddress: '', deliveryCity: '', deliveryState: '', deliveryZip: '',
+    deliveryDate: '', deliveryTime: '17:00', deliveryApptNumber: '',
+    // Cargo
+    commodity: '', weight: 0, miles: 0,
+    // Financials
+    rate: 0,
+    // Status + Notes
+    status: 'booked' as LoadStatus,
+    notes: '',
+  });
 
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                        <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Broker Contact</label>
-                        <input type="text" value={parsedData.brokerContact} onChange={e => setParsedData({ ...parsedData, brokerContact: e.target.value })}
-                          className="w-full rounded-xl px-3 py-2 bg-white/5 border border-white/10 text-white text-xs focus:outline-none" />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Broker Phone</label>
-                        <input type="text" value={parsedData.brokerPhone} onChange={e => setParsedData({ ...parsedData, brokerPhone: e.target.value })}
-                          className="w-full rounded-xl px-3 py-2 bg-white/5 border border-white/10 text-white text-xs focus:outline-none" />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Broker Email</label>
-                        <input type="text" value={parsedData.brokerEmail} onChange={e => setParsedData({ ...parsedData, brokerEmail: e.target.value })}
-                          className="w-full rounded-xl px-3 py-2 bg-white/5 border border-white/10 text-white text-xs focus:outline-none" />
-                      </div>
-                    </div>
+  const set = (k: string, v: unknown) => setForm(f => ({ ...f, [k]: v }));
 
-                    <div className="p-3 rounded-xl border border-white/[0.04] bg-white/[0.01] space-y-2.5">
-                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-white/5 pb-1">Pickup Info</div>
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="col-span-2">
-                          <label className="block text-[9px] font-semibold text-slate-500 uppercase mb-0.5">Facility Name</label>
-                          <input type="text" value={parsedData.pickupFacility} onChange={e => setParsedData({ ...parsedData, pickupFacility: e.target.value })}
-                            className="w-full rounded-lg px-2.5 py-1.5 bg-white/5 border border-white/10 text-white text-xs" />
-                        </div>
-                        <div>
-                          <label className="block text-[9px] font-semibold text-slate-500 uppercase mb-0.5">Pickup Date</label>
-                          <input type="date" value={parsedData.pickupDate} onChange={e => setParsedData({ ...parsedData, pickupDate: e.target.value })}
-                            className="w-full rounded-lg px-2.5 py-1.5 bg-white/5 border border-white/10 text-white text-xs" />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-4 gap-2">
-                        <div className="col-span-2">
-                          <label className="block text-[9px] font-semibold text-slate-500 uppercase mb-0.5">Address</label>
-                          <input type="text" value={parsedData.pickupAddress} onChange={e => setParsedData({ ...parsedData, pickupAddress: e.target.value })}
-                            className="w-full rounded-lg px-2.5 py-1.5 bg-white/5 border border-white/10 text-white text-xs" />
-                        </div>
-                        <div>
-                          <label className="block text-[9px] font-semibold text-slate-500 uppercase mb-0.5">City</label>
-                          <input type="text" value={parsedData.pickupCity} onChange={e => setParsedData({ ...parsedData, pickupCity: e.target.value })}
-                            className="w-full rounded-lg px-2.5 py-1.5 bg-white/5 border border-white/10 text-white text-xs" />
-                        </div>
-                        <div>
-                          <label className="block text-[9px] font-semibold text-slate-500 uppercase mb-0.5">State</label>
-                          <input type="text" value={parsedData.pickupState} onChange={e => setParsedData({ ...parsedData, pickupState: e.target.value })}
-                            className="w-full rounded-lg px-2.5 py-1.5 bg-white/5 border border-white/10 text-white text-xs" />
-                        </div>
-                      </div>
-                    </div>
+  const handleSave = async () => {
+    if (!form.pickupDate || !form.deliveryDate || !form.rate) {
+      toast.error('Required fields: pickup date, delivery date, and rate.');
+      return;
+    }
+    try {
+      await addLoad({
+        ...form,
+        carrierId,
+        dispatchFeePercent: carrierFee,
+        ratConUrl: undefined,
+        bolUrl: undefined,
+        podUrl: undefined,
+      });
+      toast.success('Load added successfully!');
+      onSaved();
+      onClose();
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Failed to save load: ' + (err?.message || err));
+    }
+  };
 
-                    <div className="p-3 rounded-xl border border-white/[0.04] bg-white/[0.01] space-y-2.5">
-                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-white/5 pb-1">Delivery Info</div>
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="col-span-2">
-                          <label className="block text-[9px] font-semibold text-slate-500 uppercase mb-0.5">Facility Name</label>
-                          <input type="text" value={parsedData.deliveryFacility} onChange={e => setParsedData({ ...parsedData, deliveryFacility: e.target.value })}
-                            className="w-full rounded-lg px-2.5 py-1.5 bg-white/5 border border-white/10 text-white text-xs" />
-                        </div>
-                        <div>
-                          <label className="block text-[9px] font-semibold text-slate-500 uppercase mb-0.5">Delivery Date</label>
-                          <input type="date" value={parsedData.deliveryDate} onChange={e => setParsedData({ ...parsedData, deliveryDate: e.target.value })}
-                            className="w-full rounded-lg px-2.5 py-1.5 bg-white/5 border border-white/10 text-white text-xs" />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-4 gap-2">
-                        <div className="col-span-2">
-                          <label className="block text-[9px] font-semibold text-slate-500 uppercase mb-0.5">Address</label>
-                          <input type="text" value={parsedData.deliveryAddress} onChange={e => setParsedData({ ...parsedData, deliveryAddress: e.target.value })}
-                            className="w-full rounded-lg px-2.5 py-1.5 bg-white/5 border border-white/10 text-white text-xs" />
-                        </div>
-                        <div>
-                          <label className="block text-[9px] font-semibold text-slate-500 uppercase mb-0.5">City</label>
-                          <input type="text" value={parsedData.deliveryCity} onChange={e => setParsedData({ ...parsedData, deliveryCity: e.target.value })}
-                            className="w-full rounded-lg px-2.5 py-1.5 bg-white/5 border border-white/10 text-white text-xs" />
-                        </div>
-                        <div>
-                          <label className="block text-[9px] font-semibold text-slate-500 uppercase mb-0.5">State</label>
-                          <input type="text" value={parsedData.deliveryState} onChange={e => setParsedData({ ...parsedData, deliveryState: e.target.value })}
-                            className="w-full rounded-lg px-2.5 py-1.5 bg-white/5 border border-white/10 text-white text-xs" />
-                        </div>
-                      </div>
-                    </div>
+  const input = (label: string, key: string, type = 'text', placeholder = '', required = false) => (
+    <div>
+      <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+        {label}{required && <span className="text-amber-500 ml-0.5">*</span>}
+      </label>
+      <input
+        type={type}
+        value={(form as any)[key]}
+        onChange={e => set(key, type === 'number' ? Number(e.target.value) : e.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-xl px-3 py-2 bg-white/5 border border-white/10 text-white text-xs focus:outline-none focus:border-amber-500/30"
+      />
+    </div>
+  );
 
-                    <div className="grid grid-cols-4 gap-3">
-                      <div>
-                        <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Commodity</label>
-                        <input type="text" value={parsedData.commodity} onChange={e => setParsedData({ ...parsedData, commodity: e.target.value })}
-                          className="w-full rounded-xl px-3 py-2 bg-white/5 border border-white/10 text-white text-xs focus:outline-none" />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Weight (lbs)</label>
-                        <input type="number" value={parsedData.weight} onChange={e => setParsedData({ ...parsedData, weight: Number(e.target.value) })}
-                          className="w-full rounded-xl px-3 py-2 bg-white/5 border border-white/10 text-white text-xs focus:outline-none" />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Miles</label>
-                        <input type="number" value={parsedData.miles} onChange={e => setParsedData({ ...parsedData, miles: Number(e.target.value) })}
-                          className="w-full rounded-xl px-3 py-2 bg-white/5 border border-white/10 text-white text-xs focus:outline-none" />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Rate ($)</label>
-                        <input type="number" value={parsedData.rate} onChange={e => setParsedData({ ...parsedData, rate: Number(e.target.value) })}
-                          className="w-full rounded-xl px-3 py-2 bg-white/5 border border-white/10 text-white text-xs focus:outline-none" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative w-full max-w-2xl h-full flex flex-col animate-slide-in-right"
+        style={{ background: '#080B14', borderLeft: '1px solid rgba(245,158,11,0.15)' }}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06] shrink-0">
+          <h3 className="text-base font-bold text-white flex items-center gap-2">
+            <Plus size={16} className="text-amber-400" /> Add Load Manually
+          </h3>
+          <button onClick={onClose} className="p-2 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors">
+            <X size={18} />
+          </button>
+        </div>
 
-            <div className="px-5 py-4 border-t border-white/5 flex justify-end gap-2 shrink-0">
-              <button 
-                onClick={() => { setShowAiModal(false); setParsedData(null); }}
-                className="px-4 py-2.5 rounded-xl text-xs text-slate-400"
-                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
-              >
-                Cancel
-              </button>
-              {parsedData && (
-                <button 
-                  onClick={handleConfirmAiLoad}
-                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-amber-500 text-black hover:bg-amber-400 transition-all active:scale-95"
-                >
-                  Confirm & Create Load
-                </button>
-              )}
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+          <div className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-2 rounded-xl">
+            This load will be added manually to your carrier dashboard.
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2">{input('Broker Name', 'brokerName', 'text', 'C.H. Robinson')}</div>
+            {input('Contact Name', 'brokerContact')}
+            {input('Broker Phone', 'brokerPhone', 'tel')}
+            {input('Broker Email', 'brokerEmail', 'email')}
+            {input('Broker MC #', 'brokerMC')}
+          </div>
+
+          <div className="border-t border-white/5 pt-4 space-y-4">
+            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Pickup Stops</div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">{input('Facility Name', 'pickupFacility', 'text', 'Logistics Terminal', true)}</div>
+              <div className="col-span-2">{input('Address', 'pickupAddress')}</div>
+              {input('City', 'pickupCity')}
+              {input('State', 'pickupState', 'text', 'TX')}
+              {input('ZIP', 'pickupZip')}
+              {input('Pickup Date', 'pickupDate', 'date', '', true)}
+              {input('Pickup Time', 'pickupTime', 'time')}
+              {input('Appt #', 'pickupApptNumber')}
             </div>
           </div>
+
+          <div className="border-t border-white/5 pt-4 space-y-4">
+            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Delivery Stops</div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">{input('Facility Name', 'deliveryFacility', 'text', 'Consignee Port', true)}</div>
+              <div className="col-span-2">{input('Address', 'deliveryAddress')}</div>
+              {input('City', 'deliveryCity')}
+              {input('State', 'deliveryState', 'text', 'CA')}
+              {input('ZIP', 'deliveryZip')}
+              {input('Delivery Date', 'deliveryDate', 'date', '', true)}
+              {input('Delivery Time', 'deliveryTime', 'time')}
+              {input('Appt #', 'deliveryApptNumber')}
+            </div>
+          </div>
+
+          <div className="border-t border-white/5 pt-4 space-y-4">
+            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Cargo & Rates</div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">{input('Commodity', 'commodity', 'text', 'Steel Coils')}</div>
+              {input('Weight (lbs)', 'weight', 'number')}
+              {input('Miles', 'miles', 'number')}
+              {input('Gross Rate ($)', 'rate', 'number', '', true)}
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Load Status</label>
+                <select
+                  value={form.status}
+                  onChange={e => set('status', e.target.value)}
+                  className="w-full rounded-xl px-3 py-2 bg-[#080B14] border border-white/10 text-white text-xs focus:outline-none"
+                >
+                  <option value="booked">Booked</option>
+                  <option value="dispatched">Dispatched</option>
+                  <option value="in_transit">In Transit</option>
+                  <option value="delivered">Delivered</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-white/5 pt-4">
+            <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Dispatch Notes</label>
+            <textarea
+              value={form.notes}
+              onChange={e => set('notes', e.target.value)}
+              rows={3}
+              placeholder="Operational details..."
+              className="w-full rounded-xl px-3 py-2 bg-white/5 border border-white/10 text-white text-xs focus:outline-none"
+            />
+          </div>
         </div>
-      )}
-      <input ref={aiFileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={handleAiUpload} />
+
+        {/* Footer */}
+        <div className="flex justify-end gap-3 px-6 py-4 border-t border-white/[0.06] bg-[#03060E] shrink-0">
+          <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white transition-all">
+            Cancel
+          </button>
+          <button onClick={handleSave} className="px-5 py-2 rounded-xl text-xs font-black bg-amber-500 text-black hover:bg-amber-400 transition-all">
+            Create Load
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

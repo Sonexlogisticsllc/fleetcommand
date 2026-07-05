@@ -4,18 +4,12 @@ import React, { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
-  Truck, DollarSign, User, Bell, ChevronRight, LogOut,
+  Truck, DollarSign, User, Bell, ChevronRight, LogOut, Activity
 } from 'lucide-react';
 import { useSonexAuth } from '@/lib/sonexAuth';
 import { NotificationBell } from '@/components/sonex/NotificationBell';
-import { getCarrier } from '@/lib/sonexStore';
+import { getCarrier, getLoadsByCarrier } from '@/lib/sonexStore';
 import type { SonexCarrier } from '@/lib/sonexTypes';
-
-const NAV_ITEMS = [
-  { label: 'Loads',    href: '/carrier',           Icon: Truck },
-  { label: 'Earnings', href: '/carrier/earnings',   Icon: DollarSign },
-  { label: 'Profile',  href: '/carrier/profile',    Icon: User },
-];
 
 function statusColor(status: string) {
   if (status === 'active') return 'text-emerald-400';
@@ -39,6 +33,8 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
     router.push('/sonex/login');
   };
   const [carrier, setCarrier] = useState<SonexCarrier | undefined>(undefined);
+  const [activeLoadId, setActiveLoadId] = useState<string | null>(null);
+
   useEffect(() => {
     if (!isAuthenticated || !isCarrier) {
       router.replace('/sonex/login');
@@ -46,6 +42,16 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
     }
     if (user?.carrierId) {
       getCarrier(user.carrierId).then(setCarrier);
+      
+      // Look up active transit load to populate workspace tab
+      getLoadsByCarrier(user.carrierId).then(loads => {
+        const active = loads.find(l => ['booked', 'dispatched', 'in_transit'].includes(l.status));
+        if (active) {
+          setActiveLoadId(active.id);
+        } else {
+          setActiveLoadId(null);
+        }
+      });
     }
   }, [isAuthenticated, isCarrier, user, router]);
 
@@ -64,6 +70,13 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
   const initials = carrier
     ? `${carrier.firstName[0]}${carrier.lastName[0]}`.toUpperCase()
     : (user?.avatar ?? '?');
+
+  const menuItems = [
+    { label: 'Loads',    href: '/carrier',           Icon: Truck },
+    ...(activeLoadId ? [{ label: 'Workspace', href: `/carrier/loads/${activeLoadId}`, Icon: Activity }] : []),
+    { label: 'Earnings', href: '/carrier/earnings',   Icon: DollarSign },
+    { label: 'Profile',  href: '/carrier/profile',    Icon: User },
+  ];
 
   // Active tab: exact match for /carrier, prefix match for the rest
   function isActive(href: string) {
@@ -116,7 +129,7 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
 
         {/* Nav items */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {NAV_ITEMS.map(({ label, href, Icon }) => {
+          {menuItems.map(({ label, href, Icon }) => {
             const active = isActive(href);
             return (
               <Link key={href} href={href}
@@ -161,7 +174,7 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
       {/* ── Mobile bottom tab bar ────────────────────────────────────────── */}
       <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 h-16 flex items-stretch"
         style={{ background: '#0F0F0F', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-        {NAV_ITEMS.map(({ label, href, Icon }) => {
+        {menuItems.map(({ label, href, Icon }) => {
           const active = isActive(href);
           return (
             <Link key={href} href={href}
