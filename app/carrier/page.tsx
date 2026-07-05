@@ -661,10 +661,10 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
               <div className="flex justify-between items-start gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="text-white font-semibold text-sm leading-snug">{load.deliveryCity}, {load.deliveryState}</div>
-                  <div className="text-slate-400 text-xs mt-0.5 truncate">{load.deliveryFacility} {load.deliveryAddress && `Â· ${load.deliveryAddress}`}</div>
+                  <div className="text-slate-400 text-xs mt-0.5 truncate">{load.deliveryFacility} {load.deliveryAddress && `· ${load.deliveryAddress}`}</div>
                   <div className="text-slate-500 text-[11px] mt-0.5 flex items-center gap-1">
-                    <Clock size={11} />{fmtDate(load.deliveryDate)} Â· {fmtTime(load.deliveryTime)}
-                    {load.deliveryApptNumber && <span className="text-amber-500/70">Â· Appt #{load.deliveryApptNumber}</span>}
+                    <Clock size={11} />{fmtDate(load.deliveryDate)} · {fmtTime(load.deliveryTime)}
+                    {load.deliveryApptNumber && <span className="text-amber-500/70"> · Appt #{load.deliveryApptNumber}</span>}
                   </div>
                 </div>
                 <a href={`geo:0,0?q=${encodeURIComponent(`${load.deliveryFacility} ${load.deliveryAddress || ''} ${load.deliveryCity} ${load.deliveryState} ${load.deliveryZip || ''}`)}(${encodeURIComponent(load.deliveryFacility.replace(/[()]/g, ''))})`}

@@ -5,10 +5,10 @@ import { useRouter } from 'next/navigation';
 import {
   Package, Plus, Search, X, Check, ChevronRight, Filter,
   Sparkles, UploadCloud, Loader2, User, Clock, ArrowRight,
-  Activity, FileText, AlertTriangle
+  Activity, FileText, AlertTriangle, Trash2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { getLoads, getCarriers, addLoad, updateLoad } from '@/lib/sonexStore';
+import { getLoads, getCarriers, addLoad, updateLoad, deleteLoad } from '@/lib/sonexStore';
 import { SonexLoad, SonexCarrier, LoadStatus, EquipmentType, computeLoadFinancials } from '@/lib/sonexTypes';
 import {
   LOAD_STATUS_LABELS, LOAD_STATUS_ORDER, EQUIPMENT_TYPE_LABELS,
@@ -563,6 +563,23 @@ export default function LoadsPage() {
                           ))}
                         </select>
                         <button
+                          onClick={async () => {
+                            if (confirm(`Are you sure you want to delete load ${load.loadNumber}?`)) {
+                              try {
+                                await deleteLoad(load.id);
+                                toast.success('Load deleted successfully');
+                                reloadData();
+                              } catch (err) {
+                                toast.error('Failed to delete load');
+                              }
+                            }
+                          }}
+                          className="p-1.5 rounded-lg border border-red-500/20 hover:bg-red-500/10 text-red-500 transition-colors"
+                          title="Delete Load"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                        <button
                           onClick={() => router.push(`/sonex/loads/${load.id}`)}
                           className="p-1.5 rounded-lg border border-white/10 hover:bg-white/5 transition-colors"
                           title="Edit"
@@ -716,8 +733,27 @@ export default function LoadsPage() {
                             {LOAD_STATUS_LABELS[load.status] || load.status}
                           </span>
                         </td>
-                        <td className="px-4 py-3.5">
-                          <ChevronRight size={14} className="text-slate-600 group-hover:text-amber-400 transition-colors" />
+                        <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={async () => {
+                                if (confirm(`Are you sure you want to delete load ${load.loadNumber}?`)) {
+                                  try {
+                                    await deleteLoad(load.id);
+                                    toast.success('Load deleted successfully');
+                                    reloadData();
+                                  } catch (err) {
+                                    toast.error('Failed to delete load');
+                                  }
+                                }
+                              }}
+                              className="p-1 rounded text-red-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                              title="Delete Load"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                            <ChevronRight size={14} className="text-slate-600 group-hover:text-amber-400 transition-colors cursor-pointer" onClick={() => router.push(`/sonex/loads/${load.id}`)} />
+                          </div>
                         </td>
                       </tr>
                     ))}

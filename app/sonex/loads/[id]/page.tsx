@@ -6,14 +6,15 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Calendar, Check, DollarSign, ExternalLink, FileText,
   MapPin, Package, Save, Truck, Upload, RefreshCw, AlertTriangle,
-  User, ShieldCheck, Mail, Phone, Info, Eye, Clock, Activity, CheckSquare
+  User, ShieldCheck, Mail, Phone, Info, Eye, Clock, Activity, CheckSquare,
+  Trash2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { CheckinTimeline } from '@/components/sonex/CheckinTimeline';
 import { LoadStatusBadge, StatusPipeline } from '@/components/sonex/StatusPipeline';
 import {
   addCheckin, getCarrier, getCarriers, getCheckins, getLoad,
-  updateLoad,
+  updateLoad, deleteLoad,
 } from '@/lib/sonexStore';
 import { CheckinEvent, LoadStatus, SonexCarrier, SonexLoad, SonexLoadCheckin, computeLoadFinancials } from '@/lib/sonexTypes';
 import { uploadFile } from '@/lib/storageUtils';
@@ -289,12 +290,30 @@ export default function LoadDetailPage() {
           <Link href="/sonex/loads" className="flex w-fit items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider transition-colors hover:text-slate-300">
             <ArrowLeft size={14} /> Back to Fleet Control
           </Link>
-          <button
-            onClick={saveEditableFields}
-            className="flex items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 py-2.5 text-xs font-black tracking-wide text-black transition-all hover:bg-amber-400 active:scale-95 uppercase"
-          >
-            <Save size={14} /> Save Configuration
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={async () => {
+                if (confirm(`Are you sure you want to delete load ${load.loadNumber}? This action cannot be undone.`)) {
+                  try {
+                    await deleteLoad(load.id);
+                    toast.success('Load deleted successfully');
+                    router.push('/sonex/loads');
+                  } catch (err) {
+                    toast.error('Failed to delete load');
+                  }
+                }
+              }}
+              className="flex items-center justify-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-5 py-2.5 text-xs font-black tracking-wide text-red-500 transition-all hover:bg-red-500/20 active:scale-95 uppercase"
+            >
+              <Trash2 size={14} /> Delete Load
+            </button>
+            <button
+              onClick={saveEditableFields}
+              className="flex items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 py-2.5 text-xs font-black tracking-wide text-black transition-all hover:bg-amber-400 active:scale-95 uppercase"
+            >
+              <Save size={14} /> Save Configuration
+            </button>
+          </div>
         </div>
 
         {/* Motive Branding Header & Badge Block */}
