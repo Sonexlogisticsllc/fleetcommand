@@ -41,7 +41,7 @@ const openDocument = (url: string) => {
   if (url.startsWith('data:')) {
     const w = window.open();
     if (w) {
-      w.document.write(\`
+      w.document.write(`
         <html>
           <head>
             <title>View Document</title>
@@ -51,13 +51,13 @@ const openDocument = (url: string) => {
             </style>
           </head>
           <body>
-            \${url.includes('pdf') 
-              ? \`<embed src="\${url}" type="application/pdf" style="width:100%; height:100vh;" />\`
-              : \`<img src="\${url}" alt="Document Preview" />\`
+            ${url.includes('pdf') 
+              ? `<embed src="${url}" type="application/pdf" style="width:100%; height:100vh;" />`
+              : `<img src="${url}" alt="Document Preview" />`
             }
           </body>
         </html>
-      \`);
+      `);
       w.document.close();
     }
   } else {
