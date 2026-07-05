@@ -6,8 +6,10 @@ import {
   AlertTriangle, Clock, Weight, DollarSign, Building2, Timer,
   Moon, Zap, XCircle, PhoneCall, ChevronDown, RefreshCw, Plus,
   Image as ImageIcon, FileText, Trash2, Eye, Navigation, AlertOctagon, Wrench,
-  Sparkles, UploadCloud, Loader2, X
+  Sparkles, UploadCloud, Loader2, X, ChevronRight, ExternalLink
 } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { useSonexAuth } from '@/lib/sonexAuth';
 import { FuelPriceWidget } from '@/components/sonex/FuelPriceWidget';
@@ -61,6 +63,36 @@ function fmtTs(ts: string) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
     d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
+
+// Bypasses browser restrictions on opening direct base64 data URLs
+const openDocument = (url: string) => {
+  if (!url) return;
+  if (url.startsWith('data:')) {
+    const w = window.open();
+    if (w) {
+      w.document.write(`
+        <html>
+          <head>
+            <title>View Document</title>
+            <style>
+              body { margin:0; background:#0B0F19; display:flex; align-items:center; justify-content:center; min-height:100vh; font-family:sans-serif; color:#fff; }
+              embed, img { max-width:100%; max-height:100vh; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+            </style>
+          </head>
+          <body>
+            ${url.includes('pdf') 
+              ? `<embed src="${url}" type="application/pdf" style="width:100%; height:100vh;" />`
+              : `<img src="${url}" alt="Document Preview" />`
+            }
+          </body>
+        </html>
+      `);
+      w.document.close();
+    }
+  } else {
+    window.open(url, '_blank');
+  }
+};
 
 const STATUS_COLORS: Record<LoadStatus, string> = {
   booked: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
@@ -302,14 +334,14 @@ function PhotoGrid({ photos, label }: { photos: SonexCargoPhoto[]; label: string
       <div className="text-[10px] text-slate-600 uppercase tracking-widest mb-1.5">{label} — {photos.length} photo{photos.length !== 1 ? 's' : ''}</div>
       <div className="flex flex-wrap gap-1.5">
         {photos.map(p => (
-          <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer"
-            className="w-14 h-14 rounded-xl overflow-hidden relative group" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
+          <button key={p.id} onClick={() => openDocument(p.url)}
+            className="w-14 h-14 rounded-xl overflow-hidden relative group text-left" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={p.url} alt={p.caption || 'photo'} className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
               <Eye size={14} className="text-white" />
             </div>
-          </a>
+          </button>
         ))}
       </div>
     </div>
@@ -393,10 +425,10 @@ function UploadSlotCard({ slot, load, photos, doneEvents, onRefresh, carrierId }
             </div>
             <div className="flex gap-1 flex-shrink-0">
               {docUrl && (
-                <a href={docUrl} target="_blank" rel="noopener noreferrer"
+                <button onClick={() => openDocument(docUrl)}
                   className="p-1.5 rounded-lg text-amber-400 hover:bg-white/10 transition-colors" title="View">
                   <Eye size={12} />
-                </a>
+                </button>
               )}
               <button
                 onClick={() => unlocked && fileRef.current?.click()}
@@ -429,11 +461,11 @@ function UploadSlotCard({ slot, load, photos, doneEvents, onRefresh, carrierId }
       {slotPhotos.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1">
           {slotPhotos.slice(0, 6).map(p => (
-            <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer"
-              className="w-10 h-10 rounded-lg overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
+            <button key={p.id} onClick={() => openDocument(p.url)}
+              className="w-10 h-10 rounded-lg overflow-hidden text-left" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={p.url} alt="" className="w-full h-full object-cover" />
-            </a>
+            </button>
           ))}
           {slotPhotos.length > 6 && (
             <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-slate-800 text-slate-400 text-[10px] font-bold">
@@ -586,10 +618,12 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
         {/* Header */}
         <div className="px-5 py-4 flex items-center justify-between"
           style={{ borderBottom: '1px solid rgba(245,158,11,0.12)', background: 'rgba(245,158,11,0.04)' }}>
-          <div>
-            <div className="text-xs text-amber-500/70 font-mono tracking-widest uppercase mb-0.5">Active Load</div>
-            <div className="text-2xl font-black text-amber-400 font-mono tracking-tight">{load.loadNumber}</div>
-          </div>
+          <Link href={`/carrier/loads/${load.id}`} className="group cursor-pointer">
+            <div className="text-xs text-amber-500/70 font-mono tracking-widest uppercase mb-0.5 group-hover:text-amber-400 transition-colors">Active Load (Tap for Workspace)</div>
+            <div className="text-2xl font-black text-amber-400 font-mono tracking-tight flex items-center gap-1.5 group-hover:text-amber-300 transition-colors">
+              {load.loadNumber} <ExternalLink size={15} />
+            </div>
+          </Link>
           <div className="flex items-center gap-2">
             <StatusBadge status={load.status} />
             {load.brokerPhone && (
@@ -818,11 +852,11 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
                     <div className="text-emerald-300 text-sm font-medium">Rate Confirmation</div>
                     <div className="text-slate-500 text-xs">Provided by dispatcher</div>
                   </div>
-                  <a href={load.ratConUrl} target="_blank" rel="noopener noreferrer"
+                  <button onClick={() => openDocument(load.ratConUrl)}
                     className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-amber-400"
                     style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
-                    <Download size={12} /> View
-                  </a>
+                    <Eye size={12} /> View
+                  </button>
                 </div>
               )}
 
@@ -880,12 +914,16 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
 // â”€â”€â”€ Past Load Row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function PastLoadRow({ load }: { load: SonexLoad }) {
+  const router = useRouter();
   return (
-    <div className="flex items-center gap-3 px-4 py-3.5 rounded-xl"
-      style={{ background: 'rgba(13,31,60,0.4)', border: '1px solid rgba(255,255,255,0.05)' }}>
+    <div 
+      onClick={() => router.push(`/carrier/loads/${load.id}`)}
+      className="flex items-center gap-3 px-4 py-3.5 rounded-xl cursor-pointer hover:border-amber-500/20 hover:bg-white/[0.02] transition-all group"
+      style={{ background: 'rgba(13,31,60,0.4)', border: '1px solid rgba(255,255,255,0.05)' }}
+    >
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-          <span className="font-mono text-amber-400 text-sm font-bold">{load.loadNumber}</span>
+          <span className="font-mono text-amber-400 text-sm font-bold group-hover:text-amber-300">{load.loadNumber}</span>
           <StatusBadge status={load.status} />
         </div>
         <div className="text-slate-300 text-xs truncate">
@@ -893,11 +931,12 @@ function PastLoadRow({ load }: { load: SonexLoad }) {
         </div>
         <div className="text-slate-500 text-xs mt-0.5">{fmtDate(load.pickupDate)} · {load.miles.toLocaleString()} mi</div>
       </div>
-      <div className="text-right flex-shrink-0">
+      <div className="text-right flex-shrink-0 mr-1">
         <div className="text-slate-400 text-xs">Gross: <span className="text-slate-300 font-mono">{fmt$(load.rate)}</span></div>
         <div className="text-amber-400 text-base font-bold font-mono">{fmt$(load.carrierNet)}</div>
         <div className="text-slate-600 text-[10px]">net pay</div>
       </div>
+      <ChevronRight size={14} className="text-slate-600 group-hover:text-amber-400 flex-shrink-0 transition-colors" />
     </div>
   );
 }

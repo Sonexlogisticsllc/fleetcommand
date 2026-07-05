@@ -32,6 +32,36 @@ function fmtExpiry(d?: string): string {
   return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
 }
 
+// Bypasses browser restrictions on opening direct base64 data URLs
+const openDocument = (url: string) => {
+  if (!url) return;
+  if (url.startsWith('data:')) {
+    const w = window.open();
+    if (w) {
+      w.document.write(`
+        <html>
+          <head>
+            <title>View Document</title>
+            <style>
+              body { margin:0; background:#0B0F19; display:flex; align-items:center; justify-content:center; min-height:100vh; font-family:sans-serif; color:#fff; }
+              embed, img { max-width:100%; max-height:100vh; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+            </style>
+          </head>
+          <body>
+            ${url.includes('pdf') 
+              ? `<embed src="${url}" type="application/pdf" style="width:100%; height:100vh;" />`
+              : `<img src="${url}" alt="Document Preview" />`
+            }
+          </body>
+        </html>
+      `);
+      w.document.close();
+    }
+  } else {
+    window.open(url, '_blank');
+  }
+};
+
 // ─── Expiry Modal ─────────────────────────────────────────────────────────────
 
 function ExpiryModal({ docType, onConfirm, onSkip, onCancel }: {
@@ -122,10 +152,10 @@ function DocSlot({ carrierId, docType, document, onUploaded }: {
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           {document?.fileUrl && (
-            <a href={document.fileUrl} target="_blank" rel="noopener noreferrer"
+            <button onClick={() => openDocument(document.fileUrl)}
               className="p-1.5 rounded-lg hover:bg-white/10 transition-colors" title="View">
               <Eye size={11} className="text-amber-400" />
-            </a>
+            </button>
           )}
           <button onClick={() => fileRef.current?.click()} disabled={uploading}
             className="p-1.5 rounded-lg hover:bg-white/10 transition-colors" title="Upload">

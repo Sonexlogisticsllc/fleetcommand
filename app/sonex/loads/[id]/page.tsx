@@ -36,6 +36,35 @@ const DOCS: Array<{ field: DocumentField; label: string; hint: string }> = [
 
 const CHECKIN_EVENTS: CheckinEvent[] = ['arrived_pickup', 'loaded_departing', 'arrived_delivery', 'delivered'];
 
+const openDocument = (url: string) => {
+  if (!url) return;
+  if (url.startsWith('data:')) {
+    const w = window.open();
+    if (w) {
+      w.document.write(\`
+        <html>
+          <head>
+            <title>View Document</title>
+            <style>
+              body { margin:0; background:#0B0F19; display:flex; align-items:center; justify-content:center; min-height:100vh; font-family:sans-serif; color:#fff; }
+              embed, img { max-width:100%; max-height:100vh; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+            </style>
+          </head>
+          <body>
+            \${url.includes('pdf') 
+              ? \`<embed src="\${url}" type="application/pdf" style="width:100%; height:100vh;" />\`
+              : \`<img src="\${url}" alt="Document Preview" />\`
+            }
+          </body>
+        </html>
+      \`);
+      w.document.close();
+    }
+  } else {
+    window.open(url, '_blank');
+  }
+};
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function Field({
@@ -601,14 +630,12 @@ export default function LoadDetailPage() {
                             />
                           </label>
                           {value && (
-                            <a
-                              href={value}
-                              target="_blank"
-                              rel="noreferrer"
+                            <button
+                              onClick={() => openDocument(value)}
                               className="flex items-center justify-center gap-1 rounded-xl border border-white/10 px-2.5 py-2 text-[10px] font-black uppercase tracking-wider text-slate-400 hover:bg-white/5 hover:text-white"
                             >
                               <Eye size={11} /> View
-                            </a>
+                            </button>
                           )}
                         </div>
                       </div>

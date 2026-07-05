@@ -24,6 +24,36 @@ const STATUS_CFG: Record<DocStatus, { icon: React.ElementType; label: string; co
 function daysUntil(dateStr: string) {
   return Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000);
 }
+
+// Bypasses browser restrictions on opening direct base64 data URLs
+const openDocument = (url: string) => {
+  if (!url) return;
+  if (url.startsWith('data:')) {
+    const w = window.open();
+    if (w) {
+      w.document.write(`
+        <html>
+          <head>
+            <title>View Document</title>
+            <style>
+              body { margin:0; background:#0B0F19; display:flex; align-items:center; justify-content:center; min-height:100vh; font-family:sans-serif; color:#fff; }
+              embed, img { max-width:100%; max-height:100vh; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+            </style>
+          </head>
+          <body>
+            ${url.includes('pdf') 
+              ? `<embed src="${url}" type="application/pdf" style="width:100%; height:100vh;" />`
+              : `<img src="${url}" alt="Document Preview" />`
+            }
+          </body>
+        </html>
+      `);
+      w.document.close();
+    }
+  } else {
+    window.open(url, '_blank');
+  }
+};
 function fmtExpiry(dateStr?: string): string {
   if (!dateStr) return '';
   const d = daysUntil(dateStr);
@@ -178,11 +208,11 @@ function DocCard({ docType, document, onUpload }: DocCardProps) {
         {/* Actions */}
         <div className="flex gap-2">
           {document?.fileUrl && (
-            <a href={document.fileUrl} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-semibold text-slate-300 hover:text-white transition-all"
+            <button onClick={() => openDocument(document.fileUrl)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-semibold text-slate-300 hover:text-white transition-all text-left"
               style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
               <Eye size={11} />View
-            </a>
+            </button>
           )}
           <button
             onClick={() => fileRef.current?.click()}
