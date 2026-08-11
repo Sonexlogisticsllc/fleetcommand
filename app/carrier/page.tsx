@@ -852,7 +852,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
                     <div className="text-emerald-300 text-sm font-medium">Rate Confirmation</div>
                     <div className="text-slate-500 text-xs">Provided by dispatcher</div>
                   </div>
-                  <button onClick={() => openDocument(load.ratConUrl)}
+                  <button onClick={() => openDocument(load.ratConUrl ?? '')}
                     className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-amber-400"
                     style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
                     <Eye size={12} /> View
@@ -1076,6 +1076,7 @@ export default function CarrierLoadsPage() {
           carrierFee={carrierFee}
           onClose={() => setShowManualModal(false)}
           onSaved={refresh}
+        />
       )}
     </div>
   );

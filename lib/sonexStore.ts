@@ -11,8 +11,8 @@ import { getCurrentUserAction } from './authActions';
 
 import {
   SonexCarrier, SonexLoad, SonexLoadCheckin, SonexCargoPhoto,
-  SonexDocument, SonexSettlement, SonexSettings,
-  DocType, computeLoadFinancials, LoadStatus, CheckinEvent,
+  SonexSettlement, SonexSettings,
+  computeLoadFinancials, LoadStatus, CheckinEvent,
 } from './sonexTypes';
 
 // â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -77,6 +77,8 @@ function mapDbLoad(l: typeof schema.loads.$inferSelect): SonexLoad {
     id: l.id,
     loadNumber: l.loadNumber,
     carrierId: l.carrierId,
+    driverId: l.driverId || undefined,
+    equipmentId: l.equipmentId || undefined,
     brokerName: l.brokerName,
     brokerContact: l.brokerContact,
     brokerPhone: l.brokerPhone,
@@ -312,7 +314,7 @@ export async function addLoad(
     await db.insert(schema.loads).values({
       id,
       loadNumber,
-      carrierId: data.carrierId || null,
+      carrierId: data.carrierId,
       brokerName: data.brokerName,
       brokerContact: data.brokerContact,
       brokerPhone: data.brokerPhone,
@@ -658,112 +660,6 @@ export async function addCargoPhoto(data: Omit<SonexCargoPhoto, 'id'>): Promise<
 
 
 
-export async function getDocuments(carrierId?: string, includeHistory = false): Promise<SonexDocument[]> {
-  try {
-    let list;
-    const conditions = [];
-    if (carrierId) {
-      conditions.push(eq(schema.carrierDocuments.carrierId, carrierId));
-    }
-    if (!includeHistory) {
-      conditions.push(eq(schema.carrierDocuments.isCurrent, true));
-    }
-
-    if (conditions.length > 0) {
-      list = await db.select().from(schema.carrierDocuments)
-        .where(and(...conditions))
-        .orderBy(desc(schema.carrierDocuments.uploadedAt));
-    } else {
-      list = await db.select().from(schema.carrierDocuments)
-        .orderBy(desc(schema.carrierDocuments.uploadedAt));
-    }
-    return list.map(d => ({
-      id: d.id,
-      carrierId: d.carrierId,
-      docType: d.docType as DocType,
-      fileName: d.fileName,
-      fileUrl: d.fileUrl,
-      filePath: d.filePath || '',
-      expirationDate: d.expirationDate || undefined,
-      uploadedAt: d.uploadedAt,
-      uploadedBy: d.uploadedBy as any,
-      notes: d.notes || undefined,
-    }));
-  } catch (err) {
-    console.error('Error fetching documents:', err);
-    return [];
-  }
-}
-
-export async function addDocument(data: Omit<SonexDocument, 'id'>): Promise<SonexDocument> {
-  try {
-    // Compliance history preservation: mark all older versions as not current
-    await db.update(schema.carrierDocuments)
-      .set({ isCurrent: false })
-      .where(and(
-        eq(schema.carrierDocuments.carrierId, data.carrierId),
-        eq(schema.carrierDocuments.docType, data.docType)
-      ));
-
-    // Insert new version as current
-    const docId = crypto.randomUUID();
-    await db.insert(schema.carrierDocuments).values({
-      id: docId,
-      carrierId: data.carrierId,
-      docType: data.docType,
-      fileName: data.fileName,
-      fileUrl: data.fileUrl,
-      filePath: data.filePath,
-      expirationDate: data.expirationDate || null,
-      uploadedAt: data.uploadedAt || new Date().toISOString(),
-      uploadedBy: data.uploadedBy,
-      notes: data.notes || '',
-      isCurrent: true,
-    });
-
-    return {
-      id: docId,
-      carrierId: data.carrierId,
-      docType: data.docType,
-      fileName: data.fileName,
-      fileUrl: data.fileUrl,
-      filePath: data.filePath,
-      expirationDate: data.expirationDate || undefined,
-      uploadedAt: data.uploadedAt || new Date().toISOString(),
-      uploadedBy: data.uploadedBy,
-      notes: data.notes || undefined,
-    };
-  } catch (err) {
-    console.error('Error adding document:', err);
-    throw err;
-  }
-}
-
-export async function deleteDocument(id: string): Promise<void> {
-  try {
-    await db.delete(schema.carrierDocuments).where(eq(schema.carrierDocuments.id, id));
-  } catch (err) {
-    console.error('Error deleting document:', err);
-    throw err;
-  }
-}
-
-export async function getExpiringDocuments(withinDays = 30): Promise<SonexDocument[]> {
-  const docs = await getDocuments();
-  const now = new Date();
-  return docs.filter(d => {
-    if (!d.expirationDate) return false;
-    const exp = new Date(d.expirationDate);
-    const daysUntil = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    return daysUntil <= withinDays;
-  }).sort((a, b) => {
-    const da = new Date(a.expirationDate!).getTime();
-    const db = new Date(b.expirationDate!).getTime();
-    return da - db;
-  });
-}
-
-
 // â”€â”€â”€ Settlements â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function getSettlements(carrierId?: string): Promise<SonexSettlement[]> {
@@ -1101,10 +997,9 @@ function buildWeeklyDataServer(loads: SonexLoad[]) {
 
 export async function getDashboardCombinedData() {
   try {
-    const [loads, carriers, expiringDocs] = await Promise.all([
+    const [loads, carriers] = await Promise.all([
       getLoads(),
       getCarriers(),
-      getExpiringDocuments(30)
     ]);
 
     const carrierMap = new Map(carriers.map(c => [c.id, `${c.firstName} ${c.lastName}`]));
@@ -1137,8 +1032,7 @@ export async function getDashboardCombinedData() {
       activity,
       weeklyData,
       podNeeded,
-      invoiceReady,
-      expiringDocs
+      invoiceReady
     };
   } catch (err) {
     console.error('Error getting dashboard combined data:', err);
@@ -1184,7 +1078,6 @@ export async function resetStore(): Promise<void> {
     console.log('Resetting database store...');
     await db.delete(schema.loadCheckins);
     await db.delete(schema.cargoPhotos);
-    await db.delete(schema.carrierDocuments);
     await db.delete(schema.settlements);
     await db.delete(schema.loads);
     await db.delete(schema.carrierDrivers);

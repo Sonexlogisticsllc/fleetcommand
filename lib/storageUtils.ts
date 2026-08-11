@@ -6,7 +6,6 @@ import { uploadFileAction, deleteFileFromStorage } from './storageActions';
 
 export type StorageBucket =
   | 'load-documents'
-  | 'carrier-documents'
   | 'cargo-photos';
 
 export interface UploadResult {
@@ -101,7 +100,7 @@ export async function uploadFile(
   }
 
   const formData = new FormData();
-  formData.append('file', fileToUpload);
+  formData.append('file', fileToUpload, file.name);
   formData.append('bucket', bucket);
   formData.append('pathPrefix', pathPrefix);
 
@@ -121,7 +120,11 @@ export async function uploadFiles(
   bucket: StorageBucket,
   pathPrefix: string = '',
 ): Promise<UploadResult[]> {
-  return Promise.all(files.map(f => uploadFile(f, bucket, pathPrefix)));
+  const results: UploadResult[] = [];
+  for (const file of files) {
+    results.push(await uploadFile(file, bucket, pathPrefix));
+  }
+  return results;
 }
 
 /**

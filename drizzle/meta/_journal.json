@@ -8,6 +8,34 @@
       "when": 1783135971330,
       "tag": "0000_tranquil_expediter",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1783135971331,
+      "tag": "0001_remove_carrier_documents",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1783135971332,
+      "tag": "0002_add_tms_operations",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1783135971333,
+      "tag": "0003_add_load_dispatch_assignments",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1783135971334,
+      "tag": "0004_add_driver_pay_profiles",
+      "breakpoints": true
     }
   ]
 }

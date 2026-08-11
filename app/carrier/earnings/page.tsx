@@ -341,8 +341,8 @@ export default function CarrierEarningsPage() {
   // Sort loads logic
   const sortedLoads = useMemo(() => {
     return [...filteredLoads].sort((a, b) => {
-      let av: string | number = a[loadSort.col as keyof SonexLoad] as string | number;
-      let bv: string | number = b[loadSort.col as keyof SonexLoad] as string | number;
+      const av: string | number = a[loadSort.col as keyof SonexLoad] as string | number;
+      const bv: string | number = b[loadSort.col as keyof SonexLoad] as string | number;
       if (typeof av === 'string' && typeof bv === 'string') {
         return loadSort.dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
       }

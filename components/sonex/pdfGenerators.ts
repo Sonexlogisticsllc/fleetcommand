@@ -213,14 +213,14 @@ export async function generateWeeklyInvoicePDF(
     carrierGroups.set(load.carrierId, group);
   }
 
-  let y = 52;
+  const y = 52;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(20, 20, 40);
   doc.text(`LOADS COMPLETED — WEEK OF ${formatDate(weekStart).toUpperCase()}`, 15, y);
 
   const tableRows: string[][] = [];
-  let runningSubtotals: { carrier: string; loads: number; fee: number }[] = [];
+  const runningSubtotals: { carrier: string; loads: number; fee: number }[] = [];
 
   Array.from(carrierGroups.entries()).forEach(([carrierId, carrierLoads]) => {
     const carrierName = carrierLoads[0].carrierName;

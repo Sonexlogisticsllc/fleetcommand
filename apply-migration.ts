@@ -1,8 +1,13 @@
 ﻿import { createClient } from '@libsql/client';
 import { readFileSync } from 'fs';
 
+const databaseUrl = process.env.TURSO_DATABASE_URL;
+if (!databaseUrl) {
+  throw new Error('TURSO_DATABASE_URL is required to apply migrations.');
+}
+
 const client = createClient({
-  url: process.env.TURSO_DATABASE_URL,
+  url: databaseUrl,
   authToken: process.env.TURSO_AUTH_TOKEN,
 });
 
@@ -17,7 +22,8 @@ async function run() {
       await client.execute(clean);
       console.log('OK:', clean.slice(0, 60).replace(/\n/g, ' '));
     } catch (e) {
-      console.error('FAILED:', clean.slice(0, 60).replace(/\n/g, ' '), '-->', e.message);
+      const message = e instanceof Error ? e.message : String(e);
+      console.error('FAILED:', clean.slice(0, 60).replace(/\n/g, ' '), '-->', message);
     }
   }
   console.log('Done.');

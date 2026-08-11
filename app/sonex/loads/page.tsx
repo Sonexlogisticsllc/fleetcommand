@@ -30,6 +30,17 @@ function fmt$(n: number) {
   return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+type ParsedPreview = {
+  documentType: 'rate_confirmation' | 'bol';
+  loadNumber: string;
+  confidenceScore: number;
+  fieldConfidence: Record<string, number>;
+  brokerName: string; brokerContact: string; brokerPhone: string; brokerEmail: string; brokerMC: string;
+  pickupFacility: string; pickupAddress: string; pickupCity: string; pickupState: string; pickupZip: string; pickupDate: string; pickupTime: string; pickupApptNumber: string;
+  deliveryFacility: string; deliveryAddress: string; deliveryCity: string; deliveryState: string; deliveryZip: string; deliveryDate: string; deliveryTime: string; deliveryApptNumber: string;
+  commodity: string; weight: number; miles: number; rate: number; notes: string;
+};
+
 // ─── Section Helper ───────────────────────────────────────────────────────────
 
 const Section = ({ title, children, cols = 2 }: { title: string; children: React.ReactNode; cols?: number }) => (
@@ -110,7 +121,7 @@ function NewLoadModal({ carriers, onClose, onSaved }: NewLoadModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative w-full max-w-2xl h-full flex flex-col animate-slide-in-right"
+      <div className="relative w-full max-w-[650px] h-full flex flex-col transition-none"
         style={{ background: '#080B14', borderLeft: '1px solid rgba(245,158,11,0.15)' }}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06] shrink-0">
@@ -250,6 +261,8 @@ export default function LoadsPage() {
   const [showNew, setShowNew] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanStep, setScanStep] = useState('');
+  const [parseDocumentType, setParseDocumentType] = useState<'rate_confirmation' | 'bol'>('rate_confirmation');
+  const [parsedPreview, setParsedPreview] = useState<ParsedPreview | null>(null);
   const aiFileRef = useRef<HTMLInputElement>(null);
 
   // Dynamic quick-assign load selections for carriers
@@ -325,20 +338,15 @@ export default function LoadsPage() {
     try {
       const fd = new FormData();
       fd.append('file', file);
+      fd.append('documentType', parseDocumentType);
       const res = await fetch('/api/parse-rc', {
         method: 'POST',
         body: fd
       });
       const json = await res.json();
       if (json.success) {
-        // Automatically save as unassigned load
-        await addLoad({
-          ...json.data,
-          carrierId: '', // Unassigned
-          status: 'booked'
-        });
-        toast.success(`✓ AI Parsed and created unassigned load: ${json.data.commodity} ($${json.data.rate})!`);
-        reloadData();
+        setParsedPreview(json.data as ParsedPreview);
+        toast.success('Document parsed. Review the structured fields before saving.');
       } else {
         toast.error(json.error || 'Failed to parse rate confirmation');
       }
@@ -349,6 +357,32 @@ export default function LoadsPage() {
       setScanning(false);
       if (aiFileRef.current) aiFileRef.current.value = '';
     }
+  };
+
+  const confirmParsedLoad = async () => {
+    if (!parsedPreview) return;
+    try {
+      const { confidenceScore, documentType, loadNumber, ...loadData } = parsedPreview;
+      await addLoad({
+        ...loadData,
+        carrierId: '',
+        status: 'booked',
+        dispatchFeePercent: 10,
+        ratConUrl: undefined,
+        bolUrl: undefined,
+        podUrl: undefined,
+        notes: (loadData.notes || '') + ' Parsed from ' + documentType + (loadNumber ? ' ' + loadNumber : '') + ' with confidence ' + confidenceScore,
+      } as Parameters<typeof addLoad>[0]);
+      setParsedPreview(null);
+      toast.success('Reviewed document saved to the unassigned queue.');
+      reloadData();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not save parsed load.');
+    }
+  };
+
+  const updateParsedField = <K extends keyof ParsedPreview>(key: K, value: ParsedPreview[K]) => {
+    setParsedPreview(current => current ? { ...current, [key]: value } : current);
   };
 
   return (
@@ -363,8 +397,12 @@ export default function LoadsPage() {
           </div>
           <p className="text-slate-400 text-xs">Automate load booking, fleet dispatching, and settlements</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
+         <div className="flex items-center gap-2">
+           <select value={parseDocumentType} onChange={event => setParseDocumentType(event.target.value as 'rate_confirmation' | 'bol')} className="border border-white/10 bg-[#0E1524] px-2 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-300 outline-none focus:border-blue-500">
+             <option value="rate_confirmation">Rate confirmation</option>
+             <option value="bol">BOL</option>
+           </select>
+           <button
             onClick={() => aiFileRef.current?.click()}
             disabled={scanning}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-amber-500/20 bg-amber-500/10 text-amber-400 font-bold text-xs hover:bg-amber-500/20 transition-all uppercase shrink-0"
@@ -390,6 +428,20 @@ export default function LoadsPage() {
         </div>
       </div>
       <input ref={aiFileRef} type="file" className="hidden" accept="image/*,application/pdf" onChange={handleAiUpload} />
+      {parsedPreview && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <button aria-label="Close extraction preview" onClick={() => setParsedPreview(null)} className="absolute inset-0 bg-slate-950/70" />
+          <aside className="relative h-full w-full max-w-[650px] overflow-y-auto border-l border-slate-800 bg-slate-900 p-5 text-slate-100 shadow-2xl">
+            <div className="flex items-start justify-between border-b border-slate-800 pb-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.08em] text-blue-400">Bounded extraction preview</p><h2 className="mt-1 text-lg font-semibold">Review before saving</h2><p className="mt-1 text-xs text-slate-400">No load has been written yet. Edit any field, then confirm.</p></div><button onClick={() => setParsedPreview(null)} className="p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white" title="Close preview"><X size={17} /></button></div>
+            <div className="mt-4 grid grid-cols-2 gap-2"><div className="border border-slate-800 bg-slate-950 p-3"><p className="text-[10px] uppercase tracking-wider text-slate-500">Overall confidence</p><p className="mt-1 font-mono text-xl font-bold text-emerald-400">{Math.round(parsedPreview.confidenceScore * 100)}%</p></div><div className="border border-slate-800 bg-slate-950 p-3"><p className="text-[10px] uppercase tracking-wider text-slate-500">Document type</p><p className="mt-2 text-xs font-semibold uppercase text-slate-200">{parsedPreview.documentType.replace('_', ' ')}</p></div></div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2"><label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Load number<input value={parsedPreview.loadNumber} onChange={event => updateParsedField('loadNumber', event.target.value)} className="mt-1 w-full border border-slate-700 bg-slate-950 px-2 py-2 text-xs text-white outline-none focus:border-blue-500" /></label><label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Broker<input value={parsedPreview.brokerName} onChange={event => updateParsedField('brokerName', event.target.value)} className="mt-1 w-full border border-slate-700 bg-slate-950 px-2 py-2 text-xs text-white outline-none focus:border-blue-500" /></label><label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Rate<input type="number" value={parsedPreview.rate} onChange={event => updateParsedField('rate', Number(event.target.value))} className="mt-1 w-full border border-slate-700 bg-slate-950 px-2 py-2 text-xs text-white outline-none focus:border-blue-500" /></label><label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Commodity<input value={parsedPreview.commodity} onChange={event => updateParsedField('commodity', event.target.value)} className="mt-1 w-full border border-slate-700 bg-slate-950 px-2 py-2 text-xs text-white outline-none focus:border-blue-500" /></label></div>
+            <div className="mt-5 border border-slate-800 bg-slate-950"><div className="border-b border-slate-800 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Pickup stop</div><div className="grid gap-3 p-3 sm:grid-cols-2"><label className="text-[10px] text-slate-400">Facility<input value={parsedPreview.pickupFacility} onChange={event => updateParsedField('pickupFacility', event.target.value)} className="mt-1 w-full border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-white outline-none focus:border-blue-500" /></label><label className="text-[10px] text-slate-400">City / state<input value={parsedPreview.pickupCity + ', ' + parsedPreview.pickupState} onChange={event => { const [city, state] = event.target.value.split(','); updateParsedField('pickupCity', city.trim()); updateParsedField('pickupState', (state || '').trim()); }} className="mt-1 w-full border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-white outline-none focus:border-blue-500" /></label><label className="text-[10px] text-slate-400">Date<input type="date" value={parsedPreview.pickupDate} onChange={event => updateParsedField('pickupDate', event.target.value)} className="mt-1 w-full border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-white outline-none focus:border-blue-500" /></label><label className="text-[10px] text-slate-400">Time<input type="time" value={parsedPreview.pickupTime} onChange={event => updateParsedField('pickupTime', event.target.value)} className="mt-1 w-full border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-white outline-none focus:border-blue-500" /></label></div></div>
+            <div className="mt-3 border border-slate-800 bg-slate-950"><div className="border-b border-slate-800 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Delivery stop</div><div className="grid gap-3 p-3 sm:grid-cols-2"><label className="text-[10px] text-slate-400">Facility<input value={parsedPreview.deliveryFacility} onChange={event => updateParsedField('deliveryFacility', event.target.value)} className="mt-1 w-full border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-white outline-none focus:border-blue-500" /></label><label className="text-[10px] text-slate-400">City / state<input value={parsedPreview.deliveryCity + ', ' + parsedPreview.deliveryState} onChange={event => { const [city, state] = event.target.value.split(','); updateParsedField('deliveryCity', city.trim()); updateParsedField('deliveryState', (state || '').trim()); }} className="mt-1 w-full border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-white outline-none focus:border-blue-500" /></label><label className="text-[10px] text-slate-400">Date<input type="date" value={parsedPreview.deliveryDate} onChange={event => updateParsedField('deliveryDate', event.target.value)} className="mt-1 w-full border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-white outline-none focus:border-blue-500" /></label><label className="text-[10px] text-slate-400">Time<input type="time" value={parsedPreview.deliveryTime} onChange={event => updateParsedField('deliveryTime', event.target.value)} className="mt-1 w-full border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-white outline-none focus:border-blue-500" /></label></div></div>
+            <details className="mt-3 border border-slate-800 bg-slate-950"><summary className="cursor-pointer px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Structured JSON</summary><pre className="max-h-48 overflow-auto border-t border-slate-800 p-3 text-[10px] leading-relaxed text-slate-300">{JSON.stringify(parsedPreview, null, 2)}</pre></details>
+            <div className="sticky bottom-0 mt-5 flex gap-2 border-t border-slate-800 bg-slate-900 pt-4"><button onClick={() => setParsedPreview(null)} className="flex-1 border border-slate-700 px-3 py-2.5 text-xs font-semibold text-slate-300 hover:bg-slate-800">Discard</button><button onClick={confirmParsedLoad} className="inline-flex flex-1 items-center justify-center gap-2 bg-blue-600 px-3 py-2.5 text-xs font-semibold text-white hover:bg-blue-500"><Check size={14} />Confirm and save</button></div>
+          </aside>
+        </div>
+      )}
 
       {/* Main Boards Tabs Navigation */}
       <div className="flex gap-2 border-b border-white/5 pb-px">

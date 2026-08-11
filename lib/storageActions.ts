@@ -11,6 +11,8 @@ const bucketName = process.env.CLOUDFLARE_R2_BUCKET_NAME || 'sonex-dispatch';
 const cdnUrl = process.env.NEXT_PUBLIC_CDN_URL || '';
 
 const isR2Configured = !!(endpoint && accessKeyId && secretAccessKey);
+const allowedBuckets = new Set(['load-documents', 'cargo-photos']);
+const maxUploadBytes = 20 * 1024 * 1024;
 
 let s3Client: S3Client | null = null;
 if (isR2Configured) {
@@ -61,9 +63,8 @@ export async function uploadFileToStorage(
       return { url: localUrl, path: localUrl };
     }
   } catch (err) {
-    console.error('Upload failed, falling back to base64:', err);
-    const base64 = `data:${contentType};base64,${fileBuffer.toString('base64')}`;
-    return { url: base64, path: '' };
+    console.error('Storage upload failed:', err);
+    throw new Error('The file could not be stored. Please retry or contact dispatch.');
   }
 }
 
@@ -72,7 +73,9 @@ export async function uploadFileAction(formData: FormData): Promise<{ url: strin
   const bucket = formData.get('bucket') as string;
   const pathPrefix = formData.get('pathPrefix') as string;
   
-  if (!file) throw new Error('No file provided');
+  if (!file || file.size === 0) throw new Error('Choose a file before uploading.');
+  if (!allowedBuckets.has(bucket)) throw new Error('Unsupported upload destination.');
+  if (file.size > maxUploadBytes) throw new Error('Files must be 20 MB or smaller.');
   
   const arrayBuffer = await file.arrayBuffer();
   const fileBuffer = Buffer.from(arrayBuffer);
@@ -80,8 +83,9 @@ export async function uploadFileAction(formData: FormData): Promise<{ url: strin
   const timestamp = Date.now();
   const rand = Math.random().toString(36).slice(2, 7);
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 40);
-  const safePath = pathPrefix
-    ? `${pathPrefix}/${timestamp}_${rand}_${safeName}`
+  const safePrefix = pathPrefix.replace(/[^a-zA-Z0-9/_-]/g, '_').replace(/^\/+|\/+$/g, '');
+  const safePath = safePrefix
+    ? `${safePrefix}/${timestamp}_${rand}_${safeName}`
     : `${timestamp}_${rand}_${safeName}`;
     
   const result = await uploadFileToStorage(fileBuffer, file.type, bucket, safePath);
@@ -103,7 +107,7 @@ export async function deleteFileFromStorage(key: string): Promise<void> {
       });
       await s3Client.send(command);
     } else if (key.startsWith('/uploads/')) {
-      const filePath = path.join(process.cwd(), 'public', key);
+      const filePath = path.join(process.cwd(), 'public', key.replace(/^\/+/, ''));
       await fs.unlink(filePath);
     }
   } catch (err) {

@@ -1,241 +1,107 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
-import {
-  ArrowRight, CheckCircle2, Clock, DollarSign, FileWarning,
-  Package, Percent, ReceiptText, Sun, Truck,
-} from 'lucide-react';
+import { ArrowRight, CheckCircle2, Clock3, DollarSign, FileWarning, Package, Percent, ReceiptText, RefreshCw, Truck } from 'lucide-react';
 import { getDashboardCombinedData } from '@/lib/sonexStore';
-import { FuelPriceWidget } from '@/components/sonex/FuelPriceWidget';
-import type { SonexCarrier, SonexLoad } from '@/lib/sonexTypes';
+import type { SonexLoad } from '@/lib/sonexTypes';
 import { LOAD_STATUS_LABELS } from '@/lib/sonexTypes';
 
-import RevenueChart from '@/components/sonex/RevenueChart';
+type DashboardStats = {
+  activeCarriers: number;
+  loadsInProgress: number;
+  loadsCompletedThisWeek: number;
+  grossThisMonth: number;
+  feesThisMonth: number;
+};
 
-function fmt$(n: number) {
-  return '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+type ActivityLoad = SonexLoad & { carrierName?: string; type: 'Pickup' | 'Delivery' };
+
+const emptyStats: DashboardStats = {
+  activeCarriers: 0,
+  loadsInProgress: 0,
+  loadsCompletedThisWeek: 0,
+  grossThisMonth: 0,
+  feesThisMonth: 0,
+};
+
+function money(value: number) {
+  return 'USD ' + value.toLocaleString('en-US', { maximumFractionDigits: 0 });
 }
 
-
-
-function statusColor(status: string) {
-  const map: Record<string, string> = {
-    booked: 'bg-blue-500/20 text-blue-300 border-blue-500/20',
-    dispatched: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/20',
-    in_transit: 'bg-amber-500/20 text-amber-300 border-amber-500/20',
-    delivered: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/20',
-    pod_received: 'bg-teal-500/20 text-teal-300 border-teal-500/20',
-    invoiced: 'bg-violet-500/20 text-violet-300 border-violet-500/20',
-    paid: 'bg-green-500/20 text-green-300 border-green-500/20',
-  };
-  return map[status] ?? 'bg-slate-500/20 text-slate-300 border-slate-500/20';
-}
-
-function KPICard({
-  label, value, icon: Icon, color,
-}: {
-  label: string;
-  value: string | number;
-  icon: React.ElementType;
-  color: string;
-}) {
-  return (
-    <div className="glass-card p-5">
-      <div className="mb-3 flex items-start justify-between">
-        <p className="metric-label">{label}</p>
-        <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${color}`}>
-          <Icon size={17} />
-        </div>
-      </div>
-      <p className="font-mono text-2xl font-bold text-white">{value}</p>
-    </div>
-  );
+function statusTone(status: string) {
+  if (status === 'in_transit') return 'bg-amber-50 text-amber-700';
+  if (status === 'dispatched') return 'bg-blue-50 text-blue-700';
+  if (status === 'delivered' || status === 'pod_received') return 'bg-emerald-50 text-emerald-700';
+  if (status === 'invoiced' || status === 'paid') return 'bg-violet-50 text-violet-700';
+  return 'bg-slate-100 text-slate-600';
 }
 
 export default function SonexDashboardPage() {
-  const [stats, setStats] = useState<any>({
-    activeCarriers: 0,
-    loadsInProgress: 0,
-    loadsCompletedThisWeek: 0,
-    grossThisMonth: 0,
-    feesThisMonth: 0,
-  });
+  const [stats, setStats] = useState<DashboardStats>(emptyStats);
   const [activity, setActivity] = useState<{ pickups: (SonexLoad & { carrierName?: string })[]; deliveries: (SonexLoad & { carrierName?: string })[] }>({ pickups: [], deliveries: [] });
   const [weeklyData, setWeeklyData] = useState<{ label: string; gross: number; fees: number }[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [podNeeded, setPodNeeded] = useState(0);
   const [invoiceReady, setInvoiceReady] = useState(0);
+  const [loading, setLoading] = useState(true);
 
-  const fetchData = () => {
-    getDashboardCombinedData().then((data: any) => {
+  const reload = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await getDashboardCombinedData();
+      setStats(data.stats);
+      setActivity(data.activity);
       setWeeklyData(data.weeklyData);
       setPodNeeded(data.podNeeded);
       setInvoiceReady(data.invoiceReady);
-      setStats(data.stats);
-      setActivity(data.activity);
-      setUnreadCount(data.unreadCount);
-    }).catch(err => {
-      console.warn('Dashboard data fetch failed:', err);
-    });
-  };
-
-  useEffect(() => {
-    // Delay initial fetch slightly to let critical layout render settle first
-    const timer = setTimeout(fetchData, 200);
-    const interval = setInterval(fetchData, 30000);
-
-    return () => {
-      clearTimeout(timer);
-      clearInterval(interval);
-    };
+    } catch (error) {
+      console.warn('Dashboard data fetch failed:', error);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const todayAll = [
-    ...activity.pickups.map(load => ({ ...load, type: 'Pickup' })),
-    ...activity.deliveries.map(load => ({ ...load, type: 'Delivery' })),
-  ].sort((a, b) => a.pickupTime.localeCompare(b.pickupTime));
+  useEffect(() => {
+    reload();
+    const interval = window.setInterval(reload, 60000);
+    return () => window.clearInterval(interval);
+  }, [reload]);
+
+  const todaysSchedule = useMemo<ActivityLoad[]>(() => [
+    ...activity.pickups.map(load => ({ ...load, type: 'Pickup' as const })),
+    ...activity.deliveries.map(load => ({ ...load, type: 'Delivery' as const })),
+  ].sort((left, right) => left.pickupTime.localeCompare(right.pickupTime)), [activity]);
+
+  const metrics = [
+    { label: 'Active carriers', value: stats.activeCarriers, Icon: Truck },
+    { label: 'Loads in progress', value: stats.loadsInProgress, Icon: Package },
+    { label: 'Completed this week', value: stats.loadsCompletedThisWeek, Icon: CheckCircle2 },
+    { label: 'Gross this month', value: money(stats.grossThisMonth), Icon: DollarSign },
+    { label: 'Dispatch fees', value: money(stats.feesThisMonth), Icon: Percent },
+  ];
+
+  const queue = [
+    { href: '/sonex/loads', label: 'POD follow-up', detail: 'Delivered loads awaiting proof of delivery', value: podNeeded, Icon: FileWarning },
+    { href: '/sonex/accounting', label: 'Invoice queue', detail: 'Loads ready for billing or settlement', value: invoiceReady, Icon: ReceiptText },
+    { href: '/sonex/planning', label: 'Planning board', detail: 'Driver, dispatcher, and weekly load plan', value: stats.loadsInProgress, Icon: Clock3 },
+  ];
 
   return (
-    <div className="space-y-6 bg-[#080808] p-6 animate-fade-in">
-      <div
-        className="relative overflow-hidden rounded-2xl border border-amber-500/20 p-6"
-        style={{ background: 'linear-gradient(135deg, rgba(255,107,53,0.12) 0%, rgba(255,140,90,0.05) 48%, rgba(8,8,8,0.9) 100%)' }}
-      >
-        <div className="relative flex items-center gap-3">
-          <Sun size={18} className="text-amber-400" />
-          <div>
-            <h1 className="font-display text-xl font-extrabold text-white">Sonex Dispatch</h1>
-            <p className="mt-0.5 text-sm text-slate-400">
-              {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-              {' \u00B7 '}
-              {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-            </p>
-          </div>
+    <div data-tms-surface className="min-h-full bg-slate-50 text-slate-900">
+      <header className="border-b border-slate-200 bg-white px-4 py-4 sm:px-6">
+        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3">
+          <div><p className="text-xs font-medium text-slate-500">Operations overview</p><h1 className="mt-1 text-xl font-semibold text-slate-950">Dispatch control center</h1></div>
+          <div className="flex items-center gap-3"><p className="hidden text-xs text-slate-500 sm:block">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p><button onClick={reload} className="inline-flex h-9 w-9 items-center justify-center border border-slate-200 bg-white text-slate-500 hover:text-slate-900" title="Refresh dashboard"><RefreshCw size={15} className={loading ? 'animate-spin' : ''} /></button></div>
         </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
-        <KPICard label="Active Carriers" value={stats.activeCarriers} icon={Truck} color="bg-amber-500/15 text-amber-400" />
-        <KPICard label="Loads In Progress" value={stats.loadsInProgress} icon={Package} color="bg-cyan-500/15 text-cyan-400" />
-        <KPICard label="Completed This Week" value={stats.loadsCompletedThisWeek} icon={CheckCircle2} color="bg-emerald-500/15 text-emerald-400" />
-        <KPICard label="Gross This Month" value={fmt$(stats.grossThisMonth)} icon={DollarSign} color="bg-amber-500/15 text-amber-400" />
-        <KPICard label="Fees This Month" value={fmt$(stats.feesThisMonth)} icon={Percent} color="bg-green-500/15 text-green-400" />
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
-          <div className="glass-card p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
-                <Clock size={16} className="text-amber-400" />
-                Today's Loads
-                <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-normal text-slate-500">
-                  {todayAll.length}
-                </span>
-              </h2>
-              <Link href="/sonex/loads" prefetch={false} className="flex items-center gap-1 text-xs text-amber-500 transition-colors hover:text-amber-400">
-                View All <ArrowRight size={12} />
-              </Link>
-            </div>
-
-            {todayAll.length === 0 ? (
-              <div className="py-10 text-center">
-                <Package size={32} className="mx-auto mb-3 text-slate-700" />
-                <p className="text-sm text-slate-500">No pickups or deliveries scheduled today.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-white/[0.06]">
-                      {['Load #', 'Type', 'Carrier', 'Route', 'Status', 'Time'].map(header => (
-                        <th key={header} className="pb-3 pr-4 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-600">{header}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/[0.04]">
-                    {todayAll.slice(0, 20).map(load => (
-                      <tr key={load.id} className="table-row-hover group">
-                        <td className="py-3 pr-4 font-mono text-xs text-amber-400">{load.loadNumber}</td>
-                        <td className="py-3 pr-4 text-xs text-slate-400">{load.type}</td>
-                        <td className="py-3 pr-4 text-xs text-slate-300">{load.carrierName ?? '-'}</td>
-                        <td className="py-3 pr-4 text-xs text-slate-400">{load.pickupState} {'->'} {load.deliveryState}</td>
-                        <td className="py-3 pr-4">
-                          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusColor(load.status)}`}>
-                            {LOAD_STATUS_LABELS[load.status]}
-                          </span>
-                        </td>
-                        <td className="py-3 pr-4 font-mono text-xs text-slate-500">{load.pickupTime}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          <div className="glass-card p-5">
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
-                <DollarSign size={16} className="text-amber-400" />
-                Weekly Revenue
-              </h2>
-              <div className="flex items-center gap-4 text-[10px] text-slate-500">
-                <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded bg-amber-500" />Gross</span>
-                <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded border border-amber-500/40 bg-amber-500/25" />Fees</span>
-              </div>
-            </div>
-            <RevenueChart data={weeklyData} />
-          </div>
+      </header>
+      <main className="mx-auto max-w-[1600px] space-y-5 p-4 sm:p-6">
+        <section className="grid gap-px overflow-hidden border border-slate-200 bg-slate-200 sm:grid-cols-2 xl:grid-cols-5">{metrics.map(({ label, value, Icon }) => <div key={label} className="flex items-center gap-3 bg-white px-4 py-3"><Icon size={17} className="text-slate-400" /><div><p className="font-mono text-lg font-semibold text-slate-950">{value}</p><p className="text-[11px] font-medium text-slate-500">{label}</p></div></div>)}</section>
+        <div className="grid gap-5 xl:grid-cols-[1.5fr_0.7fr]">
+          <section className="border border-slate-200 bg-white"><div className="flex items-center justify-between border-b border-slate-200 px-4 py-3"><div><h2 className="text-sm font-semibold text-slate-900">Today&apos;s execution</h2><p className="mt-0.5 text-xs text-slate-500">Pickup and delivery commitments in dispatch order.</p></div><Link href="/sonex/loads" className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:text-blue-900">Load management <ArrowRight size={13} /></Link></div><div className="overflow-x-auto"><table className="w-full min-w-[780px] text-left text-xs"><thead className="bg-slate-50 text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-500"><tr><th className="px-4 py-3">Load</th><th className="px-4 py-3">Event</th><th className="px-4 py-3">Carrier</th><th className="px-4 py-3">Route</th><th className="px-4 py-3">Status</th><th className="px-4 py-3 text-right">Time</th></tr></thead><tbody className="divide-y divide-slate-100">{todaysSchedule.slice(0, 20).map(load => <tr key={load.id + load.type} className="hover:bg-slate-50"><td className="px-4 py-3 font-mono font-semibold text-slate-800">{load.loadNumber}</td><td className="px-4 py-3 text-slate-600">{load.type}</td><td className="px-4 py-3 text-slate-600">{load.carrierName ?? 'Unassigned'}</td><td className="px-4 py-3 text-slate-600">{load.pickupState} to {load.deliveryState}</td><td className="px-4 py-3"><span className={'inline-flex px-1.5 py-0.5 text-[10px] font-semibold ' + statusTone(load.status)}>{LOAD_STATUS_LABELS[load.status]}</span></td><td className="px-4 py-3 text-right font-mono text-slate-600">{load.type === 'Pickup' ? load.pickupTime : load.deliveryTime}</td></tr>)}{!todaysSchedule.length && <tr><td colSpan={6} className="px-4 py-12 text-center text-xs text-slate-400">No pickup or delivery commitments today.</td></tr>}</tbody></table></div></section>
+          <section className="border border-slate-200 bg-white"><div className="border-b border-slate-200 px-4 py-3"><h2 className="text-sm font-semibold text-slate-900">Operations queue</h2><p className="mt-0.5 text-xs text-slate-500">The next work requiring dispatcher attention.</p></div><div className="divide-y divide-slate-100">{queue.map(({ href, label, detail, value, Icon }) => <Link key={label} href={href} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50"><Icon size={16} className="text-slate-400" /><div className="min-w-0 flex-1"><p className="text-xs font-semibold text-slate-800">{label}</p><p className="mt-0.5 truncate text-[11px] text-slate-500">{detail}</p></div><span className="font-mono text-sm font-semibold text-slate-800">{value}</span><ArrowRight size={13} className="text-slate-400" /></Link>)}</div></section>
         </div>
-
-        <div className="space-y-4">
-          <div className="glass-card p-5">
-            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Core Work Queue</h2>
-            <div className="space-y-3">
-              {[
-                { href: '/sonex/loads', icon: FileWarning, label: 'Loads Needing POD', value: podNeeded },
-                { href: '/sonex/financials', icon: ReceiptText, label: 'Invoice / Settlement Loads', value: invoiceReady },
-              ].map(({ href, icon: Icon, label, value }) => (
-                <Link key={label} href={href} prefetch={false} className="flex items-center justify-between group">
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/15">
-                      <Icon size={13} className="text-amber-400" />
-                    </div>
-                    <span className="text-xs text-slate-400 transition-colors group-hover:text-slate-300">{label}</span>
-                  </div>
-                  <span className={`font-mono text-xs font-bold ${value > 0 ? 'text-amber-400' : 'text-slate-600'}`}>{value}</span>
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          <div className="glass-card p-5">
-            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Dispatch Hub Focus</h2>
-            <div className="space-y-2">
-              {[
-                { href: '/sonex/load-log', icon: Package, label: 'Load Management', text: 'Master log, status, BOL/POD, cargo photos' },
-                { href: '/sonex/financials', icon: ReceiptText, label: 'Invoicing', text: 'Weekly fee invoices and carrier settlements' },
-              ].map(({ href, icon: Icon, label, text }) => (
-                <Link key={label} href={href} prefetch={false} className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 transition-colors hover:border-amber-500/25 hover:bg-amber-500/[0.06]">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400">
-                    <Icon size={16} />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-white">{label}</p>
-                    <p className="truncate text-[11px] text-slate-500">{text}</p>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          <FuelPriceWidget />
-        </div>
-      </div>
+        <section className="border border-slate-200 bg-white"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3"><div><h2 className="text-sm font-semibold text-slate-900">Eight-week revenue view</h2><p className="mt-0.5 text-xs text-slate-500">Gross revenue and dispatch fee trend, kept deliberately light for fast initial render.</p></div><Link href="/sonex/accounting" className="text-xs font-semibold text-blue-700 hover:text-blue-900">Open accounting</Link></div><div className="overflow-x-auto"><table className="w-full min-w-[620px] text-left text-xs"><thead className="bg-slate-50 text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-500"><tr><th className="px-4 py-3">Week</th><th className="px-4 py-3 text-right">Gross revenue</th><th className="px-4 py-3 text-right">Dispatch fees</th><th className="px-4 py-3">Fee share</th></tr></thead><tbody className="divide-y divide-slate-100">{weeklyData.map(week => { const percentage = week.gross ? Math.min(100, Math.round((week.fees / week.gross) * 100)) : 0; return <tr key={week.label} className="hover:bg-slate-50"><td className="px-4 py-3 font-medium text-slate-700">{week.label}</td><td className="px-4 py-3 text-right font-mono text-slate-800">{money(week.gross)}</td><td className="px-4 py-3 text-right font-mono text-slate-800">{money(week.fees)}</td><td className="px-4 py-3"><div className="flex items-center gap-2"><div className="h-1.5 w-28 overflow-hidden bg-slate-100"><div className="h-full bg-blue-600" style={{ width: percentage + '%' }} /></div><span className="font-mono text-[11px] text-slate-500">{percentage}%</span></div></td></tr>; })}{!weeklyData.length && <tr><td colSpan={4} className="px-4 py-12 text-center text-xs text-slate-400">No weekly revenue data is available yet.</td></tr>}</tbody></table></div></section>
+      </main>
     </div>
   );
 }
-

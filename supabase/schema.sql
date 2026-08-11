@@ -119,20 +119,6 @@ CREATE TABLE IF NOT EXISTS public.cargo_photos (
     uploaded_by text NOT NULL CHECK (uploaded_by IN ('admin', 'carrier'))
 );
 
--- ─── 6. MESSAGES TABLE ────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS public.messages (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    carrier_id uuid REFERENCES public.carriers(id) ON DELETE CASCADE NOT NULL,
-    sender_id uuid,
-    sender_name text NOT NULL,
-    sender_role text NOT NULL CHECK (sender_role IN ('admin', 'carrier')),
-    message_text text NOT NULL,
-    attachment_url text,
-    attachment_type text CHECK (attachment_type IN ('image', 'document')),
-    read boolean DEFAULT false NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
 -- ─── 7. SETTLEMENTS TABLE ────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.settlements (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -176,7 +162,6 @@ ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.loads ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.load_checkins ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cargo_photos ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.settlements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
 
@@ -204,9 +189,6 @@ DROP POLICY IF EXISTS "Carriers can add check-ins for their own loads" ON public
 DROP POLICY IF EXISTS "Admins have full access on cargo_photos" ON public.cargo_photos;
 DROP POLICY IF EXISTS "Carriers can view cargo photos of their own loads" ON public.cargo_photos;
 DROP POLICY IF EXISTS "Carriers can upload cargo photos for their own loads" ON public.cargo_photos;
-DROP POLICY IF EXISTS "Admins have full access on messages" ON public.messages;
-DROP POLICY IF EXISTS "Carriers can view their own messages" ON public.messages;
-DROP POLICY IF EXISTS "Carriers can send messages in their thread" ON public.messages;
 DROP POLICY IF EXISTS "Admins have full access on settlements" ON public.settlements;
 DROP POLICY IF EXISTS "Carriers can view their own settlements" ON public.settlements;
 DROP POLICY IF EXISTS "Anyone authenticated can read settings" ON public.settings;
@@ -226,9 +208,6 @@ CREATE POLICY "Carriers can add check-ins for their own loads" ON public.load_ch
 CREATE POLICY "Admins have full access on cargo_photos" ON public.cargo_photos FOR ALL TO authenticated USING (public.get_my_role() = 'admin');
 CREATE POLICY "Carriers can view cargo photos of their own loads" ON public.cargo_photos FOR SELECT TO authenticated USING (load_id IN (SELECT id FROM public.loads WHERE carrier_id = public.get_my_carrier_id()));
 CREATE POLICY "Carriers can upload cargo photos for their own loads" ON public.cargo_photos FOR INSERT TO authenticated WITH CHECK (load_id IN (SELECT id FROM public.loads WHERE carrier_id = public.get_my_carrier_id()));
-CREATE POLICY "Admins have full access on messages" ON public.messages FOR ALL TO authenticated USING (public.get_my_role() = 'admin');
-CREATE POLICY "Carriers can view their own messages" ON public.messages FOR SELECT TO authenticated USING (carrier_id = public.get_my_carrier_id());
-CREATE POLICY "Carriers can send messages in their thread" ON public.messages FOR INSERT TO authenticated WITH CHECK (carrier_id = public.get_my_carrier_id());
 CREATE POLICY "Admins have full access on settlements" ON public.settlements FOR ALL TO authenticated USING (public.get_my_role() = 'admin');
 CREATE POLICY "Carriers can view their own settlements" ON public.settlements FOR SELECT TO authenticated USING (carrier_id = public.get_my_carrier_id());
 CREATE POLICY "Anyone authenticated can read settings" ON public.settings FOR SELECT TO authenticated USING (true);

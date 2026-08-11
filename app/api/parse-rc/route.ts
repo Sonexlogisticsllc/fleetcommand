@@ -43,6 +43,7 @@ export async function POST(req: Request) {
     }
 
     const fileName = file.name.toLowerCase();
+    const documentType = formData.get('documentType') === 'bol' ? 'bol' : 'rate_confirmation';
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
@@ -58,36 +59,42 @@ export async function POST(req: Request) {
     }
 
     // 2. Broker Details Lookup
+    let brokerEvidence = false;
     let brokerName = 'Total Quality Logistics (TQL)';
     let brokerPhone = '(800) 555-0199';
     let brokerContact = 'John Smith';
     let brokerEmail = 'jsmith@tql.com';
 
     if (textPool.includes('tql') || textPool.includes('total quality logistics')) {
+      brokerEvidence = true;
       brokerName = 'Total Quality Logistics (TQL)';
       brokerPhone = '(800) 555-0199';
       brokerContact = 'TQL Load Team';
       brokerEmail = 'carrierinvoicing@tql.com';
       if (brokerMC === '99824') brokerMC = '654321';
     } else if (textPool.includes('robinson') || textPool.includes('ch robinson') || textPool.includes('c.h.')) {
+      brokerEvidence = true;
       brokerName = 'C.H. Robinson';
       brokerPhone = '(800) 323-7587';
       brokerContact = 'CHR Booking';
       brokerEmail = 'loadboard@chrobinson.com';
       brokerMC = '123456';
     } else if (textPool.includes('xpo')) {
+      brokerEvidence = true;
       brokerName = 'XPO Logistics';
       brokerPhone = '(844) 742-5976';
       brokerContact = 'XPO Dispatch';
       brokerEmail = 'loadposting@xpo.com';
       brokerMC = '789012';
     } else if (textPool.includes('coyote')) {
+      brokerEvidence = true;
       brokerName = 'Coyote Logistics';
       brokerPhone = '(773) 849-5000';
       brokerContact = 'Coyote Team';
       brokerEmail = 'loads@coyote.com';
       brokerMC = '456789';
     } else if (textPool.includes('landstar')) {
+      brokerEvidence = true;
       brokerName = 'Landstar System';
       brokerPhone = '(800) 872-9400';
       brokerContact = 'Landstar Agency';
@@ -97,6 +104,7 @@ export async function POST(req: Request) {
       // Dynamic parse of broker name
       const brokerMatch = textPool.match(/broker\s*name\s*:\s*([^:\n]{3,40})/i) || textPool.match(/carrier\s*agreement\s*with\s*([^:\n]{3,40})/i);
       if (brokerMatch) {
+        brokerEvidence = true;
         brokerName = brokerMatch[1].trim().toUpperCase();
         brokerContact = 'Agent';
         brokerEmail = 'dispatch@' + brokerName.split(' ')[0].toLowerCase() + '.com';
@@ -131,9 +139,9 @@ export async function POST(req: Request) {
 
     // 4. Dates Heuristics
     const dateMatches = textPool.match(/\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/g) || textPool.match(/\b\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}\b/g);
-    let tomorrow = new Date();
+    const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    let dayAfter = new Date();
+    const dayAfter = new Date();
     dayAfter.setDate(dayAfter.getDate() + 2);
 
     let pickupDateStr = tomorrow.toISOString().split('T')[0];
@@ -155,6 +163,7 @@ export async function POST(req: Request) {
     }
 
     // 5. Rate / Financials Extraction
+    let rateEvidence = false;
     let rate = 1850;
     const rateMatches = textPool.match(/(?:rate|total|price|amount|flat|charges|pay|payment)\s*(?::\s*|\$\s*|\s+)\$?([1-9]\d{2,3}(?:,\d{3})*(?:\.\d{2})?)/gi);
     if (rateMatches) {
@@ -163,34 +172,54 @@ export async function POST(req: Request) {
         return digits ? parseFloat(digits[0].replace(/,/g, '')) : 0;
       }).filter(n => n >= 300 && n <= 8000);
       if (parsedRates.length > 0) {
+        rateEvidence = true;
         rate = Math.max(...parsedRates);
       }
     }
 
     // 6. Weight & Distance
+    let weightEvidence = false;
     let weight = 28500;
     const weightMatch = textPool.match(/(\d{2,3},?\d{3})\s*(?:lbs|lb|weight|gross)/i);
     if (weightMatch) {
+      weightEvidence = true;
       weight = parseInt(weightMatch[1].replace(/,/g, ''));
     }
 
+    let milesEvidence = false;
     let miles = 480;
     const milesMatch = textPool.match(/(\d{2,4})\s*(?:miles|mi|distance)/i);
     if (milesMatch) {
+      milesEvidence = true;
       miles = parseInt(milesMatch[1]);
     }
 
     // 7. Commodity Info
+    let commodityEvidence = false;
     let commodity = 'General Freight';
     const commodities = ['steel coils', 'paper rolls', 'beverages', 'produce', 'lumber', 'auto parts', 'machinery', 'electronics'];
     const matchedComm = commodities.find(c => textPool.includes(c));
     if (matchedComm) {
+      commodityEvidence = true;
       commodity = matchedComm.toUpperCase();
     }
+
+    const evidenceCount = [brokerEvidence, Boolean(mcMatch), Boolean(dateMatches?.length), foundHubs.length > 0, rateEvidence, weightEvidence, milesEvidence, commodityEvidence].filter(Boolean).length;
+    const confidenceScore = Math.min(0.99, Math.max(0.35, Math.round((0.35 + evidenceCount * 0.08) * 100) / 100));
+    const loadNumberMatch = textPool.match(/(?:load|order|shipment)\s*(?:#|number|no\.?|id)?\s*[:\-]?\s*([a-z0-9-]{4,})/i);
 
     return NextResponse.json({
       success: true,
       data: {
+        documentType,
+        loadNumber: loadNumberMatch?.[1]?.toUpperCase() || '',
+        confidenceScore,
+        fieldConfidence: {
+          brokerName: brokerEvidence ? confidenceScore : 0.35,
+          stops: foundHubs.length >= 2 && Boolean(dateMatches?.length) ? confidenceScore : 0.45,
+          rate: rateEvidence ? confidenceScore : 0.35,
+          commodity: commodityEvidence ? confidenceScore : 0.4,
+        },
         brokerName,
         brokerContact,
         brokerPhone,
@@ -219,8 +248,8 @@ export async function POST(req: Request) {
         notes: `AI Heuristic Parsed load from document: ${file.name}`
       }
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('AI parsing error:', err);
-    return NextResponse.json({ success: false, error: err?.message || 'Error processing document' }, { status: 500 });
+    return NextResponse.json({ success: false, error: err instanceof Error ? err.message : 'Error processing document' }, { status: 500 });
   }
 }

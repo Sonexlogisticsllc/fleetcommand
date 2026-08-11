@@ -361,7 +361,7 @@ export default function LoadDetailPage() {
                 { id: 'overview', label: 'Overview & GPS', icon: Activity },
                 { id: 'details', label: 'Routes & Cargo', icon: Package },
                 { id: 'financials', label: 'Settlements & Pay', icon: DollarSign },
-                { id: 'documents', label: 'Compliance Vault', icon: FileText },
+                { id: 'documents', label: 'Load Documents', icon: FileText },
               ].map(tab => {
                 const Icon = tab.icon;
                 const active = activeTab === tab.id;
@@ -591,12 +591,12 @@ export default function LoadDetailPage() {
               </div>
             )}
 
-            {/* TAB PANEL 4: COMPLIANCE DOCUMENTS */}
+            {/* TAB PANEL 4: LOAD DOCUMENTS */}
             {activeTab === 'documents' && (
               <div className="glass-card p-6 space-y-6">
                 <div className="flex items-center gap-2 pb-3 border-b border-white/5">
                   <FileText size={14} className="text-amber-500" />
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">DOCUMENT COMPLIANCE CHECK</h3>
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Load Document Review</h3>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -665,13 +665,13 @@ export default function LoadDetailPage() {
             )}
           </div>
 
-          {/* MOTIVE COMPLIANCE SIDEBAR */}
+          {/* Carrier assignment sidebar */}
           <div className="space-y-6">
             
             {/* Carrier Profile Info Card */}
             <div className="glass-card overflow-hidden">
               <div className="px-5 py-4 border-b border-white/[0.06] flex items-center justify-between bg-white/[0.01]">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Motive Compliance</h3>
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Carrier Assignment</h3>
                 <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${carrier ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25' : 'bg-slate-800 text-slate-400'}`}>
                   {carrier ? 'Linked' : 'Not Linked'}
                 </span>
@@ -733,7 +733,7 @@ export default function LoadDetailPage() {
                   </div>
                 ) : (
                   <div className="text-center py-6">
-                    <p className="text-xs text-slate-500">Select a carrier to link Motive compliance logs and vehicle parameters.</p>
+                    <p className="text-xs text-slate-500">Select a carrier to assign equipment and contact details to this load.</p>
                   </div>
                 )}
 

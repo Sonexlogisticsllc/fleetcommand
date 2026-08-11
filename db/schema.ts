@@ -46,6 +46,15 @@ export const carrierDrivers = sqliteTable('carrier_drivers', {
   updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const driverPayProfiles = sqliteTable('driver_pay_profiles', {
+  driverId: text('driver_id').primaryKey().references(() => carrierDrivers.id, { onDelete: 'cascade' }),
+  payType: text('pay_type').notNull().default('per_mile'),
+  payRate: real('pay_rate').notNull().default(0),
+  updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+  payTypeIdx: index('driver_pay_type_idx').on(table.payType),
+}));
+
 // ─── 3. CARRIER EQUIPMENT TABLE ────────────────────────────────────────────────
 export const carrierEquipment = sqliteTable('carrier_equipment', {
   id: text('id').primaryKey(),
@@ -135,6 +144,16 @@ export const loads = sqliteTable('loads', {
 });
 
 // ─── 7. LOAD CHECK-INS TABLE ──────────────────────────────────────────────────
+// Dispatch ownership is deliberately separate from the commercial load record.
+export const loadDispatchAssignments = sqliteTable('load_dispatch_assignments', {
+  loadId: text('load_id').primaryKey().references(() => loads.id, { onDelete: 'cascade' }),
+  dispatcherId: text('dispatcher_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+  dispatcherAssignmentIdx: index('load_dispatcher_idx').on(table.dispatcherId),
+}));
+
 export const loadCheckins = sqliteTable('load_checkins', {
   id: text('id').primaryKey(),
   loadId: text('load_id').notNull().references(() => loads.id, { onDelete: 'cascade' }),
@@ -156,22 +175,6 @@ export const cargoPhotos = sqliteTable('cargo_photos', {
 });
 
 // ─── 9. CARRIER DOCUMENTS TABLE ────────────────────────────────────────────────
-export const carrierDocuments = sqliteTable('carrier_documents', {
-  id: text('id').primaryKey(),
-  carrierId: text('carrier_id').notNull().references(() => carriers.id, { onDelete: 'cascade' }),
-  docType: text('doc_type').notNull(), // CDL, W9, COI, etc.
-  fileName: text('file_name').notNull(),
-  fileUrl: text('file_url').notNull(),
-  filePath: text('file_path').notNull(),
-  expirationDate: text('expiration_date'), // ISO YYYY-MM-DD
-  uploadedAt: text('uploaded_at').notNull().default(sql`CURRENT_TIMESTAMP`),
-  uploadedBy: text('uploaded_by').notNull(), // admin, carrier
-  notes: text('notes').notNull().default(''),
-  isCurrent: integer('is_current', { mode: 'boolean' }).notNull().default(true), // compliance history tracker
-}, (table) => ({
-  carrierDocCurrentIdx: index('carrier_doc_current_idx').on(table.carrierId, table.docType, table.isCurrent),
-}));
-
 // ─── 10. SETTLEMENTS TABLE ────────────────────────────────────────────────────
 export const settlements = sqliteTable('settlements', {
   id: text('id').primaryKey(),
@@ -199,3 +202,76 @@ export const settings = sqliteTable('settings', {
   adminUsers: text('admin_users').notNull().default('[]'), // JSON array
   updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+// Operational work attached to a load or carrier.
+export const operationalTasks = sqliteTable('operational_tasks', {
+  id: text('id').primaryKey(),
+  loadId: text('load_id').references(() => loads.id, { onDelete: 'cascade' }),
+  carrierId: text('carrier_id').references(() => carriers.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  category: text('category').notNull().default('dispatch'),
+  priority: text('priority').notNull().default('normal'),
+  status: text('status').notNull().default('open'),
+  assigneeName: text('assignee_name'),
+  dueAt: text('due_at'),
+  completedAt: text('completed_at'),
+  notes: text('notes').notNull().default(''),
+  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+  taskLoadIdx: index('task_load_idx').on(table.loadId, table.status),
+  taskCarrierIdx: index('task_carrier_idx').on(table.carrierId, table.status),
+}));
+
+export const loadExpenses = sqliteTable('load_expenses', {
+  id: text('id').primaryKey(),
+  loadId: text('load_id').notNull().references(() => loads.id, { onDelete: 'cascade' }),
+  carrierId: text('carrier_id').notNull().references(() => carriers.id, { onDelete: 'cascade' }),
+  category: text('category').notNull(),
+  vendorName: text('vendor_name'),
+  amount: real('amount').notNull(),
+  incurredAt: text('incurred_at').notNull(),
+  notes: text('notes').notNull().default(''),
+  receiptUrl: text('receipt_url'),
+  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+  expenseLoadIdx: index('expense_load_idx').on(table.loadId),
+  expenseCarrierIdx: index('expense_carrier_idx').on(table.carrierId, table.incurredAt),
+}));
+
+export const invoices = sqliteTable('invoices', {
+  id: text('id').primaryKey(),
+  invoiceNumber: text('invoice_number').unique().notNull(),
+  loadId: text('load_id').notNull().references(() => loads.id, { onDelete: 'restrict' }),
+  customerName: text('customer_name').notNull(),
+  amount: real('amount').notNull(),
+  status: text('status').notNull().default('draft'),
+  issuedAt: text('issued_at'),
+  dueAt: text('due_at'),
+  paidAt: text('paid_at'),
+  notes: text('notes').notNull().default(''),
+  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+  invoiceLoadIdx: index('invoice_load_idx').on(table.loadId),
+  invoiceStatusIdx: index('invoice_status_idx').on(table.status, table.dueAt),
+}));
+
+export const maintenanceTasks = sqliteTable('maintenance_tasks', {
+  id: text('id').primaryKey(),
+  equipmentId: text('equipment_id').notNull().references(() => carrierEquipment.id, { onDelete: 'cascade' }),
+  carrierId: text('carrier_id').notNull().references(() => carriers.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  status: text('status').notNull().default('scheduled'),
+  dueAt: text('due_at'),
+  completedAt: text('completed_at'),
+  estimatedCost: real('estimated_cost'),
+  actualCost: real('actual_cost'),
+  vendorName: text('vendor_name'),
+  notes: text('notes').notNull().default(''),
+  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+  maintenanceEquipmentIdx: index('maintenance_equipment_idx').on(table.equipmentId, table.status),
+  maintenanceDueIdx: index('maintenance_due_idx').on(table.status, table.dueAt),
+}));

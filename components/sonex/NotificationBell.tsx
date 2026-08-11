@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Bell, AlertTriangle, FileWarning, Inbox, Clock, X } from 'lucide-react';
-import { getLoads, getLoadsByCarrier, getDocuments, getCheckins } from '@/lib/sonexStore';
-import type { SonexLoad, SonexDocument } from '@/lib/sonexTypes';
+import { getLoads, getLoadsByCarrier, getCheckins } from '@/lib/sonexStore';
 
 interface AlertItem {
   id: string;
@@ -30,28 +29,7 @@ export function NotificationBell({ role, carrierId }: NotificationBellProps) {
 
       if (role === 'admin') {
         // ─── ADMIN NOTIFICATIONS ───────────────────────────────────────────────
-        // 1. Documents expiring within 30 days
-        const docs = await getDocuments(undefined, false); // only current docs
-        docs.forEach(doc => {
-          if (doc.expirationDate) {
-            const exp = new Date(doc.expirationDate);
-            const daysLeft = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-            if (daysLeft <= 30) {
-              const isExpired = daysLeft < 0;
-              activeAlerts.push({
-                id: `doc-${doc.id}`,
-                type: isExpired ? 'error' : 'warning',
-                title: isExpired ? 'Document Expired' : 'Document Expiring',
-                desc: isExpired
-                  ? `Carrier ${doc.carrierId.slice(0, 5)} - ${doc.docType.replace(/_/g, ' ')} has expired!`
-                  : `Carrier ${doc.carrierId.slice(0, 5)} - ${doc.docType.replace(/_/g, ' ')} expires in ${daysLeft} days.`,
-                link: `/sonex/carriers/${doc.carrierId}`,
-              });
-            }
-          }
-        });
-
-        // 2. Active loads crossing detention threshold
+        // Active loads crossing detention threshold
         const loads = await getLoads();
         const activeLoads = loads.filter(l => ['dispatched', 'in_transit'].includes(l.status));
         
@@ -110,28 +88,7 @@ export function NotificationBell({ role, carrierId }: NotificationBellProps) {
           });
         });
 
-        // 2. Documents expiring soon
-        const docs = await getDocuments(carrierId, false);
-        docs.forEach(doc => {
-          if (doc.expirationDate) {
-            const exp = new Date(doc.expirationDate);
-            const daysLeft = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-            if (daysLeft <= 30) {
-              const isExpired = daysLeft < 0;
-              activeAlerts.push({
-                id: `doc-carrier-${doc.id}`,
-                type: isExpired ? 'error' : 'warning',
-                title: 'Compliance Alert',
-                desc: isExpired
-                  ? `Your ${doc.docType.replace(/_/g, ' ')} has EXPIRED! Please upload a renewal immediately.`
-                  : `Your ${doc.docType.replace(/_/g, ' ')} expires in ${daysLeft} days. Please upload renewal.`,
-                link: '/carrier/documents',
-              });
-            }
-          }
-        });
-
-        // 3. Detention threshold warning on active load
+        // Detention threshold warning on active load
         const activeLoad = loads.find(l => ['dispatched', 'in_transit'].includes(l.status));
         if (activeLoad) {
           const checkins = await getCheckins(activeLoad.id);

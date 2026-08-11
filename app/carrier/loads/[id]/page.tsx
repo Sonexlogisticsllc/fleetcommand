@@ -272,7 +272,7 @@ export default function CarrierLoadDetailPage() {
                 { id: 'overview', label: 'Overview & GPS', icon: Activity },
                 { id: 'details', label: 'Schedules & Routing', icon: MapPin },
                 { id: 'financials', label: 'Settlement & Pay', icon: DollarSign },
-                { id: 'documents', label: 'POD Upload Vault', icon: FileText },
+                { id: 'documents', label: 'Load Documents', icon: FileText },
               ].map(tab => {
                 const Icon = tab.icon;
                 const active = activeTab === tab.id;
@@ -443,7 +443,7 @@ export default function CarrierLoadDetailPage() {
               <div className="glass-card p-6 space-y-6">
                 <div className="flex items-center gap-2 pb-3 border-b border-white/5">
                   <FileText size={14} className="text-amber-500" />
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">UPLOAD COMPLIANCE DOCUMENTS</h3>
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Upload Load Documents</h3>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

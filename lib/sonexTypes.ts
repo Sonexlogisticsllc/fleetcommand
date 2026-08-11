@@ -43,79 +43,6 @@ export type CheckinEvent =
 
 export type SonexRole = 'admin' | 'carrier';
 
-export type DocType =
-  | 'drivers_license_front'
-  | 'drivers_license_back'
-  | 'cdl_front'
-  | 'cdl_back'
-  | 'medical_card'
-  | 'mvr'
-  | 'truck_registration'
-  | 'trailer_registration'
-  | 'dot_inspection'
-  | 'coi'          // Certificate of Insurance
-  | 'w9'
-  | 'dispatch_agreement'
-  | 'mc_lease'
-  | 'drug_test'
-  | 'background_check'
-  | 'void_check'
-  | 'eld_certificate';
-
-export type DocStatus = 'valid' | 'expiring_soon' | 'expired' | 'missing';
-
-export const DOCS_WITH_EXPIRY: DocType[] = [
-  'drivers_license_front', 'drivers_license_back',
-  'cdl_front', 'cdl_back',
-  'medical_card', 'mvr',
-  'truck_registration', 'trailer_registration',
-  'dot_inspection', 'coi', 'drug_test',
-];
-
-export const DOC_TYPE_LABELS: Record<DocType, string> = {
-  drivers_license_front: "Driver's License (Front)",
-  drivers_license_back:  "Driver's License (Back)",
-  cdl_front:             'CDL (Front)',
-  cdl_back:              'CDL (Back)',
-  medical_card:          'Medical Card',
-  mvr:                   'Motor Vehicle Record',
-  truck_registration:    'Truck Registration',
-  trailer_registration:  'Trailer Registration',
-  dot_inspection:        'DOT Inspection',
-  coi:                   'Certificate of Insurance',
-  w9:                    'W-9 Form',
-  dispatch_agreement:    'Dispatch Agreement',
-  mc_lease:              'MC Lease Agreement',
-  drug_test:             'Drug Test',
-  background_check:      'Background Check',
-  void_check:            'Voided Check (Direct Deposit)',
-  eld_certificate:       'ELD Certificate',
-};
-
-export const ALL_DOC_TYPES: DocType[] = [
-  'drivers_license_front', 'drivers_license_back',
-  'cdl_front', 'cdl_back',
-  'medical_card', 'mvr',
-  'truck_registration', 'trailer_registration',
-  'dot_inspection', 'coi', 'w9',
-  'dispatch_agreement', 'mc_lease',
-  'drug_test', 'background_check',
-  'void_check', 'eld_certificate',
-];
-
-export interface SonexDocument {
-  id: string;
-  carrierId: string;
-  docType: DocType;
-  fileName: string;
-  fileUrl: string;       // Supabase Storage public URL
-  filePath: string;      // Storage path for deletion
-  expirationDate?: string;  // ISO date, for docs that expire
-  uploadedAt: string;
-  uploadedBy: 'admin' | 'carrier';
-  notes?: string;
-}
-
 // â”€â”€â”€ Core Entities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface SonexCarrier {
@@ -171,6 +98,8 @@ export interface SonexLoad {
   id: string;
   loadNumber: string;    // e.g. SNX-2025-001
   carrierId: string;
+  driverId?: string;
+  equipmentId?: string;
   // Broker
   brokerName: string;
   brokerContact: string;
@@ -292,7 +221,6 @@ export interface SonexStoreData {
   loads: SonexLoad[];
   checkins: SonexLoadCheckin[];
   cargoPhotos: SonexCargoPhoto[];
-  documents: SonexDocument[];
   settlements: SonexSettlement[];
   settings: SonexSettings;
   initialized: boolean;
@@ -353,16 +281,6 @@ export function computeLoadFinancials(rate: number, miles: number, feePercent: n
   const carrierNet = Math.round((rate - dispatchFeeAmount) * 100) / 100;
   const ratePerMile = miles > 0 ? Math.round((rate / miles) * 100) / 100 : 0;
   return { dispatchFeeAmount, carrierNet, ratePerMile };
-}
-
-export function computeDocStatus(expirationDate?: string): 'valid' | 'expiring_soon' | 'expired' | 'missing' {
-  if (!expirationDate) return 'valid';
-  const exp = new Date(expirationDate);
-  const now = new Date();
-  const daysUntil = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-  if (daysUntil < 0) return 'expired';
-  if (daysUntil <= 30) return 'expiring_soon';
-  return 'valid';
 }
 
 

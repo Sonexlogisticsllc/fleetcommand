@@ -61,18 +61,6 @@ INSERT INTO public.load_checkins (
 );
 
 
--- 4. SEED MESSAGES
-INSERT INTO public.messages (
-    carrier_id, sender_name, sender_role, message_text, read, created_at
-) VALUES (
-    'c0000000-0000-0000-0000-000000000001', 'Sonex Dispatch', 'admin', 'Welcome to the Sonex Dispatch Hub! You can view your loads, log checkins, and upload PODs here.', true, '2026-06-28 10:00:00+00'
-), (
-    'c0000000-0000-0000-0000-000000000001', 'John Doe', 'carrier', 'Thanks! Excited to work together. Staging my truck now for the Pepsi load tomorrow.', true, '2026-06-28 10:15:00+00'
-), (
-    'c0000000-0000-0000-0000-000000000001', 'Sonex Dispatch', 'admin', 'Sounds good, let us know if you need anything else.', false, '2026-06-28 10:20:00+00'
-);
-
-
 -- 5. SEED INSTRUCTIONS FOR AUTH.USERS (PROFILE SYNCS)
 -- Note: To sign in, users must be registered in auth.users.
 -- Running the queries below will create auth.users which automatically populates public.users through the trigger.
