@@ -1001,7 +1001,7 @@ export default function CarrierLoadsPage() {
   }, [carrierId]);
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+    <div className="mx-auto max-w-[1180px] px-3 py-5 sm:px-5 space-y-5">
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-black text-white tracking-tight">My Loads</h1>

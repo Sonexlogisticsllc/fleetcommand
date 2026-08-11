@@ -17,13 +17,13 @@ import {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const STATUS_BADGE: Record<LoadStatus, string> = {
-  booked: 'bg-blue-500/20 text-blue-300 border-blue-500/20',
-  dispatched: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/20',
-  in_transit: 'bg-amber-500/20 text-amber-300 border-amber-500/20',
-  delivered: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/20',
-  pod_received: 'bg-teal-500/20 text-teal-300 border-teal-500/20',
-  invoiced: 'bg-violet-500/20 text-violet-300 border-violet-500/20',
-  paid: 'bg-green-500/20 text-green-300 border-green-500/20',
+  booked: 'bg-slate-800 text-slate-300 border-slate-700',
+  dispatched: 'bg-blue-950 text-blue-300 border-blue-800',
+  in_transit: 'bg-amber-950 text-amber-300 border-amber-800',
+  delivered: 'bg-emerald-950 text-emerald-300 border-emerald-800',
+  pod_received: 'bg-emerald-950 text-emerald-300 border-emerald-800',
+  invoiced: 'bg-purple-950 text-purple-300 border-purple-800',
+  paid: 'bg-purple-950 text-purple-300 border-purple-800',
 };
 
 function fmt$(n: number) {
