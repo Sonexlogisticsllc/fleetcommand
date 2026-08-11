@@ -470,7 +470,28 @@ export default function LoadsPage() {
 
       {/* BOARD VIEW 1: ACTIVE DISPATCH BOARD */}
       {activeBoardTab === 'dispatch' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <>
+        <div className="overflow-x-auto border border-slate-800 bg-slate-900">
+          <table className="w-full min-w-[980px] text-left">
+            <thead className="border-b border-slate-800 bg-slate-950"><tr className="h-7 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500"><th className="px-2 py-1">Driver / Unit</th><th className="px-2 py-1">Load</th><th className="px-2 py-1">Route</th><th className="px-2 py-1">Pickup</th><th className="px-2 py-1">Delivery</th><th className="px-2 py-1 text-right">Rate</th><th className="px-2 py-1">Status</th><th className="px-2 py-1">Action</th></tr></thead>
+            <tbody className="divide-y divide-slate-800">
+              {activeCarriers.map(carrier => {
+                const activeLoad = loads.filter(load => load.carrierId === carrier.id).find(load => !['delivered', 'pod_received', 'invoiced', 'paid'].includes(load.status));
+                return <tr key={carrier.id} className="h-7 cursor-pointer text-[11px] hover:bg-slate-800/70" onClick={() => activeLoad && router.push(`/sonex/loads/${activeLoad.id}`)}>
+                  <td className="px-2 py-1"><div className="font-medium text-slate-200">{carrier.firstName} {carrier.lastName}</div><div className="font-mono text-[10px] text-slate-500">{carrier.truckMake} · {carrier.truckPlate}</div></td>
+                  <td className="px-2 py-1 font-mono font-semibold text-sky-400">{activeLoad?.loadNumber ?? '—'}</td>
+                  <td className="max-w-[300px] truncate px-2 py-1 text-slate-300">{activeLoad ? `${activeLoad.pickupCity}, ${activeLoad.pickupState} → ${activeLoad.deliveryCity}, ${activeLoad.deliveryState}` : 'No active assignment'}</td>
+                  <td className="px-2 py-1 font-mono text-slate-400">{activeLoad ? fmtDate(activeLoad.pickupDate) : '—'}</td>
+                  <td className="px-2 py-1 font-mono text-slate-400">{activeLoad ? fmtDate(activeLoad.deliveryDate) : '—'}</td>
+                  <td className="px-2 py-1 text-right font-mono text-emerald-400">{activeLoad ? fmt$(activeLoad.rate) : '—'}</td>
+                  <td className="px-2 py-1"><span className={`inline-flex border px-1.5 py-0.5 text-[10px] font-bold ${activeLoad ? STATUS_BADGE[activeLoad.status] : 'border-slate-700 bg-slate-800 text-slate-300'}`}>{activeLoad ? LOAD_STATUS_LABELS[activeLoad.status] : 'UNASSIGNED'}</span></td>
+                  <td className="px-2 py-1"><ChevronRight size={14} className="text-slate-500" /></td>
+                </tr>;
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {activeCarriers.map(carrier => {
             // Find active load (not completed) for this carrier
             const carrierLoads = loads.filter(l => l.carrierId === carrier.id);
@@ -555,6 +576,7 @@ export default function LoadsPage() {
             );
           })}
         </div>
+        </>
       )}
 
       {/* BOARD VIEW 2: UNASSIGNED ORDER QUEUE */}
