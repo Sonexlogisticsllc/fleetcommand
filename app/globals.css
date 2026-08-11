@@ -395,3 +395,49 @@
 [data-portal="carrier"] .rounded-2xl,
 [data-portal="carrier"] .rounded-xl,
 [data-portal="carrier"] .rounded-full { border-radius: 0.125rem !important; }
+
+/* Supplied Datatruck reference uses a light-first workspace with a saturated command rail. */
+[data-portal="sonex"],
+[data-portal="carrier"] {
+  background: #f2f5f9 !important;
+  color: #111827 !important;
+}
+[data-portal="sonex"] [data-tms-surface],
+[data-portal="carrier"] [data-tms-surface] {
+  background: #f2f5f9 !important;
+  color: #111827 !important;
+}
+[data-portal="sonex"] .glass-card,
+[data-portal="carrier"] .glass-card,
+[data-portal="sonex"] .glass-card-elevated,
+[data-portal="carrier"] .glass-card-elevated {
+  background: #ffffff !important;
+  border: 1px solid #e1e7ef !important;
+  border-radius: 8px !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+}
+[data-portal="sonex"] [data-tms-surface] .bg-white,
+[data-portal="carrier"] [data-tms-surface] .bg-white {
+  background-color: #ffffff !important;
+}
+[data-portal="sonex"] [data-tms-surface] .bg-slate-50,
+[data-portal="carrier"] [data-tms-surface] .bg-slate-50 {
+  background-color: #f8fafc !important;
+}
+[data-portal="sonex"] [data-tms-surface] .text-white,
+[data-portal="carrier"] [data-tms-surface] .text-white {
+  color: #111827 !important;
+}
+[data-portal="sonex"] [data-tms-surface] .text-slate-500,
+[data-portal="carrier"] [data-tms-surface] .text-slate-500 {
+  color: #64748b !important;
+}
+[data-portal="sonex"] [data-tms-surface] table tbody tr,
+[data-portal="carrier"] [data-tms-surface] table tbody tr {
+  height: 56px !important;
+  background: #ffffff;
+}
+[data-portal="sonex"] [data-tms-surface] table thead,
+[data-portal="carrier"] [data-tms-surface] table thead {
+  background: #e7f3fc !important;
+}

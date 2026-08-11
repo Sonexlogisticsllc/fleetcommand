@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useSonexAuth } from '@/lib/sonexAuth';
 import { NotificationBell } from '@/components/sonex/NotificationBell';
+import { DatatruckMark } from '@/components/sonex/DatatruckMark';
 import { getCarrier, getLoadsByCarrier } from '@/lib/sonexStore';
 import type { SonexCarrier } from '@/lib/sonexTypes';
 
@@ -85,7 +86,7 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
   }
 
   return (
-    <div data-portal="carrier" data-tms-surface className="min-h-screen bg-[#090d16]">
+    <div data-portal="carrier" data-tms-surface className="min-h-screen bg-[#f2f5f9]">
 
       {/* ── Mobile top header ────────────────────────────────────────────── */}
       <header className="lg:hidden fixed top-0 inset-x-0 z-40 flex items-center justify-between px-4 h-14 border-b border-slate-800 bg-[#0f172a]">
@@ -99,20 +100,19 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
       </header>
 
       {/* ── Desktop sidebar ──────────────────────────────────────────────── */}
-      <aside className="hidden lg:flex flex-col fixed inset-y-0 left-0 w-60 z-40 border-r border-slate-800 bg-[#0f172a]">
+      <aside className="hidden lg:flex flex-col fixed inset-y-0 left-0 w-[84px] z-40 bg-gradient-to-b from-[#8d42c9] via-[#6847d2] to-[#2f66d5] text-white">
         {/* Brand */}
-        <div className="px-5 py-4 border-b border-slate-800">
-          <div className="text-sky-400 font-semibold text-base tracking-[0.18em] font-mono">SONEX</div>
-          <div className="text-slate-500 text-[10px] mt-1 uppercase tracking-[0.12em]">Carrier workspace</div>
+        <div className="flex h-[72px] items-center justify-center border-b border-white/15">
+          <DatatruckMark />
         </div>
 
         {/* Carrier identity */}
-        <div className="px-4 py-3 border-b border-slate-800">
+        <div className="flex justify-center border-b border-white/15 px-2 py-3">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 flex items-center justify-center flex-shrink-0 font-semibold text-[11px] text-slate-950 bg-sky-400">
+            <div className="flex h-8 w-8 items-center justify-center bg-white/20 text-[11px] font-semibold text-white">
               {initials}
             </div>
-            <div className="min-w-0 flex-1">
+            <div className="hidden min-w-0 flex-1">
               <div className="text-white text-sm font-semibold truncate">{carrierName}</div>
               {carrier && (
                 <div className={`text-xs font-medium ${statusColor(carrier.status)}`}>
@@ -125,48 +125,48 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
         </div>
 
         {/* Nav items */}
-        <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
+        <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-3">
           {menuItems.map(({ label, href, Icon }) => {
             const active = isActive(href);
             return (
               <Link key={href} href={href}
-                className={`flex items-center gap-3 px-3 py-2.5 text-[13px] font-medium transition-colors group relative ${
+                className={`group relative flex h-12 items-center justify-center text-[13px] font-medium transition-colors ${
                   active
-                    ? 'bg-slate-800 text-sky-400'
-                    : 'text-slate-400 hover:text-slate-100 hover:bg-slate-900'
+                    ? 'bg-white/20 text-white'
+                    : 'text-white/75 hover:bg-white/10 hover:text-white'
                 }`}>
                 {active && (
-                  <span className="absolute left-0 top-0 bottom-0 w-0.5 bg-sky-400" />
+                  <span className="absolute bottom-0 left-0 top-0 w-0.5 bg-white" />
                 )}
-                <Icon size={16} className={active ? 'text-sky-400' : 'text-slate-500 group-hover:text-slate-300'} />
-                <span>{label}</span>
-                {!active && <ChevronRight size={14} className="ml-auto opacity-0 group-hover:opacity-40 transition-opacity" />}
+                <Icon size={22} strokeWidth={1.8} className="text-white" />
+                <span className="sr-only">{label}</span>
               </Link>
             );
           })}
         </nav>
 
         {/* Sign Out */}
-        <div className="px-2 py-2 border-t border-slate-800">
+        <div className="border-t border-white/15 px-2 py-2">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2.5 text-slate-500 hover:text-red-400 hover:bg-red-950/40 transition-colors text-[13px] font-medium"
+            className="flex h-10 w-full items-center justify-center text-white/75 hover:bg-white/10 hover:text-white"
           >
             <LogOut size={16} className="shrink-0" />
-            <span>Sign Out</span>
+            <span className="sr-only">Sign Out</span>
           </button>
         </div>
 
         {/* Footer hint */}
-        <div className="px-4 py-3 border-t border-slate-800">
-          <div className="text-[10px] text-slate-600 text-center">Sonex Dispatch Hub v1</div>
+        <div className="border-t border-white/15 px-2 py-3">
+          <div className="text-center text-[9px] text-white/70">SONEX</div>
         </div>
       </aside>
 
       {/* ── Main content ─────────────────────────────────────────────────── */}
-      <main className="lg:pl-60 pt-14 lg:pt-0 pb-20 lg:pb-0 min-h-screen">
-        <div className="hidden lg:flex h-11 items-center justify-between border-b border-slate-800 bg-[#090d16] px-6 text-[11px] text-slate-500">
-          <span className="font-mono uppercase tracking-[0.08em]">Carrier operations</span>
+      <main className="min-h-screen pb-20 pt-14 lg:pl-[84px] lg:pt-0 lg:pb-0">
+        <div className="hidden h-[72px] items-center gap-4 bg-gradient-to-r from-[#8b3fc5] via-[#6b46d2] to-[#405bd9] px-5 text-white lg:flex">
+          <span className="text-[20px] font-medium">Carrier portal</span>
+          <div className="ml-auto flex items-center gap-4"><span className="rounded-full border border-white/80 px-4 py-2 text-sm">Live Support</span><span>Datatruck 1.0⌄</span><NotificationBell role="carrier" carrierId={user?.carrierId} /><User size={22} /></div>
           <span className="text-emerald-400">● System operational</span>
         </div>
         {children}
