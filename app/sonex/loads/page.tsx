@@ -13,6 +13,7 @@ import { SonexLoad, SonexCarrier, LoadStatus, EquipmentType, computeLoadFinancia
 import {
   LOAD_STATUS_LABELS, LOAD_STATUS_ORDER, EQUIPMENT_TYPE_LABELS,
 } from '@/lib/sonexTypes';
+import { uploadFile } from '@/lib/storageUtils';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,19 @@ type ParsedPreview = {
   commodity: string; weight: number; miles: number; rate: number; notes: string;
 };
 
+const LOAD_VIEW_TABS = [
+  { id: 'all', label: 'All Loads', count: (loads: SonexLoad[]) => loads.length },
+  { id: 'upcoming', label: 'Upcoming Loads', count: (loads: SonexLoad[]) => loads.filter(load => load.status === 'booked').length },
+  { id: 'dispatched', label: 'Dispatched', count: (loads: SonexLoad[]) => loads.filter(load => load.status === 'dispatched').length },
+  { id: 'in_transit', label: 'In-Transit', count: (loads: SonexLoad[]) => loads.filter(load => load.status === 'in_transit').length },
+  { id: 'delivered', label: 'Delivered', count: (loads: SonexLoad[]) => loads.filter(load => ['delivered', 'pod_received'].includes(load.status)).length },
+  { id: 'unpaid', label: 'Unpaid', count: (loads: SonexLoad[]) => loads.filter(load => load.status === 'invoiced').length },
+  { id: 'trips', label: 'Trips', count: (loads: SonexLoad[]) => loads.filter(load => Boolean(load.carrierId)).length },
+  { id: 'ltl', label: 'LTL', count: (loads: SonexLoad[]) => loads.filter(load => /ltl/i.test(load.notes || '')).length },
+] as const;
+
+type LoadViewTab = typeof LOAD_VIEW_TABS[number]['id'];
+
 // ─── Section Helper ───────────────────────────────────────────────────────────
 
 const Section = ({ title, children, cols = 2 }: { title: string; children: React.ReactNode; cols?: number }) => (
@@ -61,6 +75,9 @@ interface NewLoadModalProps {
 }
 
 function NewLoadModal({ carriers, onClose, onSaved }: NewLoadModalProps) {
+  const rateConRef = useRef<HTMLInputElement>(null);
+  const [creationMode, setCreationMode] = useState<'premium' | 'manual' | 'truckgpt' | 'other'>('manual');
+  const [rateConFile, setRateConFile] = useState<File | null>(null);
   const [form, setForm] = useState({
     carrierId: '', // Default to unassigned
     // Broker
@@ -91,13 +108,17 @@ function NewLoadModal({ carriers, onClose, onSaved }: NewLoadModalProps) {
       toast.error('Please fill in required fields: dates and rate.');
       return;
     }
-    await addLoad({
+    const created = await addLoad({
       ...form,
       dispatchFeePercent: feePercent,
       ratConUrl: undefined,
       bolUrl: undefined,
       podUrl: undefined,
     });
+    if (rateConFile) {
+      const uploaded = await uploadFile(rateConFile, 'load-documents', `${created.id}/ratConUrl`);
+      await updateLoad(created.id, { ratConUrl: uploaded.url });
+    }
     toast.success('Load created successfully!');
     onSaved();
     onClose();
@@ -133,6 +154,16 @@ function NewLoadModal({ carriers, onClose, onSaved }: NewLoadModalProps) {
           </button>
         </div>
 
+        <div className="grid grid-cols-4 gap-1 border-b border-white/[0.06] px-6 py-3">
+          {([
+            ['premium', 'TruckGPT Premium'],
+            ['manual', 'Manual entry'],
+            ['truckgpt', 'TruckGPT'],
+            ['other', 'Other methods'],
+          ] as const).map(([id, label]) => <button key={id} onClick={() => { setCreationMode(id); if (id === 'premium' || id === 'truckgpt') rateConRef.current?.click(); }} className={`px-2 py-2 text-[11px] font-semibold ${creationMode === id ? 'bg-violet-700 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>{label}</button>)}
+          <input ref={rateConRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={event => { const file = event.target.files?.[0] ?? null; setRateConFile(file); if (file) toast.success(`${file.name} attached for review`); event.target.value = ''; }} />
+        </div>
+
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
           {/* Carrier Assignment Select */}
@@ -152,6 +183,10 @@ function NewLoadModal({ carriers, onClose, onSaved }: NewLoadModalProps) {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="border border-dashed border-slate-700 bg-slate-950 p-4">
+            <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold text-slate-200">Rate confirmation <span className="font-normal text-slate-500">(optional)</span></p><p className="mt-1 text-[10px] text-slate-500">Attach the broker PDF or image to this load.</p></div><button type="button" onClick={() => rateConRef.current?.click()} className="inline-flex items-center gap-1.5 border border-slate-700 px-3 py-2 text-[10px] font-semibold text-slate-200 hover:border-blue-500"><UploadCloud size={13} /> Choose file</button></div>{rateConFile && <p className="mt-2 truncate text-[10px] text-emerald-400">{rateConFile.name}</p>}
           </div>
 
           <Section title="Broker Information" cols={2}>
@@ -256,6 +291,7 @@ export default function LoadsPage() {
   const [search, setSearch] = useState('');
   const [statusTab, setStatusTab] = useState<LoadStatus | 'all'>('all');
   const [carrierFilter, setCarrierFilter] = useState('all');
+  const [loadViewTab, setLoadViewTab] = useState<LoadViewTab>('all');
   
   // Modals & Scan state
   const [showNew, setShowNew] = useState(false);
@@ -267,6 +303,12 @@ export default function LoadsPage() {
 
   // Dynamic quick-assign load selections for carriers
   const [quickAssignLoads, setQuickAssignLoads] = useState<Record<string, string>>({});
+  const [denseMode, setDenseMode] = useState(false);
+  const [showColumns, setShowColumns] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState({ broker: true, route: true, dates: true, rate: true, fee: true, status: true });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [selectedLoadIds, setSelectedLoadIds] = useState<Set<string>>(new Set());
 
   const reloadData = () => {
     getLoads().then(setLoads);
@@ -302,6 +344,44 @@ export default function LoadsPage() {
       return searchMatch && statusMatch && carrierMatch;
     }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [loads, search, statusTab, carrierFilter, carrierMap]);
+  const pageCount = Math.max(1, Math.ceil(filteredLoads.length / pageSize));
+  const pagedLoads = filteredLoads.slice((page - 1) * pageSize, page * pageSize);
+  useEffect(() => setPage(1), [search, statusTab, carrierFilter, loadViewTab]);
+
+  const toggleLoadSelection = (loadId: string) => {
+    setSelectedLoadIds(current => {
+      const next = new Set(current);
+      if (next.has(loadId)) next.delete(loadId); else next.add(loadId);
+      return next;
+    });
+  };
+
+  const togglePageSelection = () => {
+    setSelectedLoadIds(current => {
+      const next = new Set(current);
+      const allSelected = pagedLoads.length > 0 && pagedLoads.every(load => next.has(load.id));
+      pagedLoads.forEach(load => allSelected ? next.delete(load.id) : next.add(load.id));
+      return next;
+    });
+  };
+
+  const deleteSelectedLoads = async () => {
+    if (!selectedLoadIds.size || !confirm(`Delete ${selectedLoadIds.size} selected load${selectedLoadIds.size === 1 ? '' : 's'}?`)) return;
+    await Promise.all(Array.from(selectedLoadIds).map(id => deleteLoad(id)));
+    setSelectedLoadIds(new Set());
+    toast.success('Selected loads deleted');
+    reloadData();
+  };
+
+  const selectLoadView = (view: LoadViewTab) => {
+    setLoadViewTab(view);
+    setActiveBoardTab('log');
+    if (view === 'all' || view === 'trips' || view === 'ltl') setStatusTab('all');
+    else if (view === 'upcoming') setStatusTab('booked');
+    else if (view === 'unpaid') setStatusTab('invoiced');
+    else if (view === 'delivered') setStatusTab('delivered');
+    else setStatusTab(view);
+  };
 
   // Quick assign load logic
   const handleQuickAssign = async (carrierId: string) => {
@@ -385,6 +465,14 @@ export default function LoadsPage() {
     setParsedPreview(current => current ? { ...current, [key]: value } : current);
   };
 
+  const exportLoads = () => {
+    const rows = filteredLoads.map(load => [load.loadNumber, carrierMap.get(load.carrierId) ?? '', load.brokerName, `${load.pickupCity}, ${load.pickupState} to ${load.deliveryCity}, ${load.deliveryState}`, load.status, load.rate].join(','));
+    const csv = ['Load,Carrier,Customer,Route,Status,Rate', ...rows].join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'sonex-loads.csv'; anchor.click(); URL.revokeObjectURL(url);
+    toast.success('Load list exported');
+  };
+
   return (
     <div className="p-6 animate-fade-in text-white space-y-6 max-w-7xl mx-auto">
       
@@ -442,6 +530,31 @@ export default function LoadsPage() {
           </aside>
         </div>
       )}
+
+      <div className="flex flex-wrap items-center gap-2 border border-slate-200 bg-white p-3">
+        {LOAD_VIEW_TABS.map(view => (
+          <button
+            key={view.id}
+            onClick={() => selectLoadView(view.id)}
+            className={`inline-flex h-9 items-center gap-1.5 border px-3 text-xs font-medium transition-colors ${loadViewTab === view.id ? 'border-violet-700 bg-violet-700 text-white' : 'border-violet-700 text-slate-800 hover:bg-violet-50'}`}
+          >
+            {view.id !== 'all' && <span className="font-mono">({view.count(loads)})</span>}
+            {view.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 border border-slate-200 bg-white p-3">
+        <div className="relative min-w-[220px] flex-1"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search loads, customers, routes" className="h-9 w-full border border-slate-200 bg-white pl-9 pr-3 text-xs text-slate-800 outline-none focus:border-blue-500" /></div>
+        <select value={carrierFilter} onChange={event => setCarrierFilter(event.target.value)} className="h-9 border border-slate-200 bg-white px-3 text-xs text-slate-700 outline-none"><option value="all">All carriers</option>{carriers.map(carrier => <option key={carrier.id} value={carrier.id}>{carrier.firstName} {carrier.lastName}</option>)}</select>
+        <button onClick={() => setActiveBoardTab('log')} className="inline-flex h-9 items-center gap-2 border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:border-blue-500"><Filter size={14} /> Filter</button>
+        <button onClick={exportLoads} className="h-9 border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:border-blue-500">Export</button>
+        <button onClick={() => { localStorage.setItem('sonex-load-view', JSON.stringify({ carrierFilter, statusTab })); toast.success('View saved'); }} className="h-9 border border-blue-100 bg-blue-50 px-3 text-xs font-medium text-blue-700">Save view</button>
+        <button onClick={() => setDenseMode(value => !value)} className="h-9 border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700">Density: {denseMode ? 'compact' : 'comfortable'}</button>
+        <button onClick={() => setShowColumns(value => !value)} className="h-9 border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700">Columns</button>
+        {selectedLoadIds.size > 0 && <button onClick={deleteSelectedLoads} className="h-9 border border-red-200 bg-red-50 px-3 text-xs font-semibold text-red-700 hover:bg-red-100">Bulk actions ({selectedLoadIds.size})</button>}
+      </div>
+      {showColumns && <div className="flex flex-wrap items-center gap-4 border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600"><span className="font-semibold">Visible columns</span>{(Object.keys(visibleColumns) as Array<keyof typeof visibleColumns>).map(column => <label key={column} className="inline-flex items-center gap-1.5 capitalize"><input type="checkbox" checked={visibleColumns[column]} onChange={event => setVisibleColumns(current => ({ ...current, [column]: event.target.checked }))} />{column}</label>)}</div>}
 
       {/* Main Boards Tabs Navigation */}
       <div className="flex gap-2 border-b border-white/5 pb-px">
@@ -778,36 +891,44 @@ export default function LoadsPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left">
                   <thead className="border-b border-white/[0.06]">
-                    <tr>
-                      {['Load #', 'Carrier', 'Broker', 'Route', 'Date', 'Rate', 'Fee', 'Status', ''].map(h => (
-                        <th key={h} className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-4 py-3">{h}</th>
-                      ))}
+                    <tr className={denseMode ? 'h-7' : 'h-14'}>
+                      <th className="w-9 px-2 py-2"><input type="checkbox" aria-label="Select visible loads" checked={pagedLoads.length > 0 && pagedLoads.every(load => selectedLoadIds.has(load.id))} onChange={togglePageSelection} /></th>
+                      <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-600">Load #</th>
+                      <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-600">Carrier</th>
+                      {visibleColumns.broker && <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-600">Broker</th>}
+                      {visibleColumns.route && <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-600">Route</th>}
+                      {visibleColumns.dates && <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-600">Date</th>}
+                      {visibleColumns.rate && <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-600">Rate</th>}
+                      {visibleColumns.fee && <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-600">Fee</th>}
+                      {visibleColumns.status && <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-600">Status</th>}
+                      <th className="px-4 py-2" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/[0.04]">
-                    {filteredLoads.map(load => (
+                    {pagedLoads.map(load => (
                       <tr key={load.id}
                         onClick={() => router.push(`/sonex/loads/${load.id}`)}
-                        className="table-row-hover cursor-pointer group">
-                        <td className="px-4 py-3.5 font-mono text-xs text-amber-400 font-semibold">{load.loadNumber}</td>
-                        <td className="px-4 py-3.5 text-slate-300 text-xs">
+                        className={`table-row-hover cursor-pointer group ${denseMode ? 'h-7' : 'h-14'}`}>
+                        <td className="px-2 py-2" onClick={event => event.stopPropagation()}><input type="checkbox" aria-label={`Select ${load.loadNumber}`} checked={selectedLoadIds.has(load.id)} onChange={() => toggleLoadSelection(load.id)} /></td>
+                        <td className="px-4 py-2 font-mono text-xs font-semibold text-blue-700">{load.loadNumber}</td>
+                        <td className="px-4 py-2 text-xs text-slate-700">
                           {carrierMap.get(load.carrierId) ?? '—'}
                         </td>
-                        <td className="px-4 py-3.5 text-slate-400 text-xs max-w-[120px] truncate">{load.brokerName}</td>
-                        <td className="px-4 py-3.5 text-xs text-slate-300">
+                        {visibleColumns.broker && <td className="max-w-[120px] truncate px-4 py-2 text-xs text-slate-700">{load.brokerName}</td>}
+                        {visibleColumns.route && <td className="px-4 py-2 text-xs text-slate-700">
                           {load.pickupState} → {load.deliveryState}
-                        </td>
-                        <td className="px-4 py-3.5 text-slate-500 text-xs">
+                        </td>}
+                        {visibleColumns.dates && <td className="px-4 py-2 text-xs text-slate-600">
                           {fmtDate(load.pickupDate)}
-                        </td>
-                        <td className="px-4 py-3.5 text-white font-semibold text-xs font-mono">{fmt$(load.rate)}</td>
-                        <td className="px-4 py-3.5 text-slate-400 text-xs font-mono">{fmt$(load.dispatchFeeAmount)}</td>
-                        <td className="px-4 py-3.5">
+                        </td>}
+                        {visibleColumns.rate && <td className="px-4 py-2 font-mono text-xs font-semibold text-emerald-600">{fmt$(load.rate)}</td>}
+                        {visibleColumns.fee && <td className="px-4 py-2 font-mono text-xs text-slate-600">{fmt$(load.dispatchFeeAmount)}</td>}
+                        {visibleColumns.status && <td className="px-4 py-2">
                           <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${STATUS_BADGE[load.status] || 'text-slate-400'}`}>
                             {LOAD_STATUS_LABELS[load.status] || load.status}
                           </span>
-                        </td>
-                        <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                        </td>}
+                        <td className="px-4 py-2" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-2">
                             <button
                               onClick={async () => {
@@ -833,6 +954,7 @@ export default function LoadsPage() {
                     ))}
                   </tbody>
                 </table>
+                <div className="flex items-center justify-between border-t border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-500"><span>{filteredLoads.length ? `${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, filteredLoads.length)} of ${filteredLoads.length}` : '0 of 0'} loads</span><div className="flex items-center gap-2"><label className="flex items-center gap-1">Rows<select value={pageSize} onChange={event => setPageSize(Number(event.target.value))} className="border border-slate-200 bg-white px-1.5 py-1 text-[11px]"><option value="20">20</option><option value="50">50</option><option value="100">100</option></select></label><button disabled={page <= 1} onClick={() => setPage(current => Math.max(1, current - 1))} className="border border-slate-200 px-2 py-1 disabled:opacity-40">‹</button><span>Page {page} of {pageCount}</span><button disabled={page >= pageCount} onClick={() => setPage(current => Math.min(pageCount, current + 1))} className="border border-slate-200 px-2 py-1 disabled:opacity-40">›</button></div></div>
               </div>
             )}
           </div>

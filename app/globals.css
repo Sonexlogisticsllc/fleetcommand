@@ -432,6 +432,24 @@
 [data-portal="carrier"] [data-tms-surface] .text-slate-500 {
   color: #64748b !important;
 }
+[data-portal="sonex"] [data-tms-surface] .text-slate-950,
+[data-portal="sonex"] [data-tms-surface] .text-slate-900,
+[data-portal="sonex"] [data-tms-surface] .text-slate-800,
+[data-portal="sonex"] [data-tms-surface] .text-slate-700,
+[data-portal="carrier"] [data-tms-surface] .text-slate-950,
+[data-portal="carrier"] [data-tms-surface] .text-slate-900,
+[data-portal="carrier"] [data-tms-surface] .text-slate-800,
+[data-portal="carrier"] [data-tms-surface] .text-slate-700 {
+  color: #1e293b !important;
+}
+[data-portal="sonex"] [data-tms-surface] .text-slate-600,
+[data-portal="carrier"] [data-tms-surface] .text-slate-600 {
+  color: #475569 !important;
+}
+[data-portal="sonex"] [data-tms-surface] .text-slate-400,
+[data-portal="carrier"] [data-tms-surface] .text-slate-400 {
+  color: #64748b !important;
+}
 [data-portal="sonex"] [data-tms-surface] table tbody tr,
 [data-portal="carrier"] [data-tms-surface] table tbody tr {
   height: 56px !important;
@@ -441,3 +459,20 @@
 [data-portal="carrier"] [data-tms-surface] table thead {
   background: #e7f3fc !important;
 }
+[data-datatruck-load-workspace] {
+  background: #f2f5f9 !important;
+  color: #1e293b !important;
+}
+[data-datatruck-load-workspace] .glass-card {
+  background: #ffffff !important;
+  border-color: #e1e7ef !important;
+  border-radius: 8px !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+}
+[data-datatruck-load-workspace] .text-white { color: #1e293b !important; }
+[data-datatruck-load-workspace] .text-slate-400 { color: #64748b !important; }
+[data-datatruck-load-workspace] .text-slate-500 { color: #475569 !important; }
+[data-datatruck-load-workspace] .border-white\/5,
+[data-datatruck-load-workspace] .border-white\/\[0\.04\],
+[data-datatruck-load-workspace] .border-white\/10 { border-color: #e1e7ef !important; }
+[data-datatruck-load-workspace] select { background: #ffffff !important; color: #1e293b !important; border-color: #cbd5e1 !important; }

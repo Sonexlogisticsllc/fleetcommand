@@ -160,7 +160,7 @@ export default function LoadDetailPage() {
   const [carrier, setCarrier] = useState<SonexCarrier | null>(null);
 
   // Tab State
-  const [activeTab, setActiveTab] = useState<'overview' | 'details' | 'financials' | 'documents'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'details' | 'financials' | 'documents' | 'activity'>('overview');
 
   // Document verification states (Mock status toggling for UI features)
   const [docVerifications, setDocVerifications] = useState<Record<DocumentField, 'pending' | 'approved' | 'rejected'>>({
@@ -282,7 +282,7 @@ export default function LoadDetailPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#050B18] p-6 animate-fade-in text-white">
+    <div data-datatruck-load-workspace className="min-h-screen bg-[#f2f5f9] p-6 animate-fade-in text-slate-900">
       <div className="mx-auto max-w-7xl space-y-6">
         
         {/* Navigation & Actions Header */}
@@ -291,6 +291,13 @@ export default function LoadDetailPage() {
             <ArrowLeft size={14} /> Back to Fleet Control
           </Link>
           <div className="flex gap-2">
+            <button
+              onClick={() => patch({ status: 'delivered' }, 'Load marked as delivered')}
+              disabled={load.status === 'delivered' || load.status === 'pod_received'}
+              className="flex items-center justify-center gap-2 border border-blue-200 bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              <CheckSquare size={14} /> Mark as delivered
+            </button>
             <button
               onClick={async () => {
                 if (confirm(`Are you sure you want to delete load ${load.loadNumber}? This action cannot be undone.`)) {
@@ -320,7 +327,7 @@ export default function LoadDetailPage() {
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-b border-white/5 pb-5">
           <div className="space-y-1">
             <div className="flex items-center gap-3">
-              <span className="text-[10px] font-black uppercase tracking-widest bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/20">Motive Control</span>
+              <span className="text-[10px] font-semibold uppercase tracking-widest bg-blue-50 text-blue-700 px-2 py-0.5 border border-blue-200">DATATRUCK LOAD</span>
               <h1 className="text-3xl font-black tracking-tight">{load.loadNumber}</h1>
               <LoadStatusBadge status={load.status} />
             </div>
@@ -358,10 +365,11 @@ export default function LoadDetailPage() {
             {/* Tabs Control */}
             <div className="flex border-b border-white/5 gap-1 overflow-x-auto pb-px">
               {[
-                { id: 'overview', label: 'Overview & GPS', icon: Activity },
-                { id: 'details', label: 'Routes & Cargo', icon: Package },
-                { id: 'financials', label: 'Settlements & Pay', icon: DollarSign },
-                { id: 'documents', label: 'Load Documents', icon: FileText },
+                { id: 'overview', label: 'Overview', icon: Activity },
+                { id: 'details', label: 'Stops & Route', icon: MapPin },
+                { id: 'documents', label: 'Paperwork', icon: FileText },
+                { id: 'financials', label: 'Financials', icon: DollarSign },
+                { id: 'activity', label: 'Activity Log', icon: Clock },
               ].map(tab => {
                 const Icon = tab.icon;
                 const active = activeTab === tab.id;
@@ -663,6 +671,13 @@ export default function LoadDetailPage() {
                 </div>
               </div>
             )}
+
+            {activeTab === 'activity' && (
+              <div className="border border-slate-200 bg-white p-5">
+                <div className="mb-4 flex items-center justify-between border-b border-slate-200 pb-3"><div><h3 className="text-sm font-semibold text-slate-900">Activity log</h3><p className="mt-0.5 text-xs text-slate-500">Check-ins and operational changes for this load.</p></div><Activity size={16} className="text-blue-600" /></div>
+                <div className="divide-y divide-slate-100">{checkins.map(checkin => <div key={checkin.id} className="flex items-start gap-3 py-3"><div className="mt-1 h-2 w-2 bg-blue-600" /><div><p className="text-xs font-medium text-slate-800">{CHECKIN_EVENT_LABELS[checkin.event]}</p><p className="mt-0.5 text-[11px] text-slate-500">{new Date(checkin.timestamp).toLocaleString()} · {checkin.loggedBy}</p>{checkin.notes && <p className="mt-1 text-xs text-slate-600">{checkin.notes}</p>}</div></div>)}{!checkins.length && <p className="py-10 text-center text-xs text-slate-400">No activity recorded yet.</p>}</div>
+              </div>
+            )}
           </div>
 
           {/* Carrier assignment sidebar */}
@@ -782,6 +797,19 @@ export default function LoadDetailPage() {
               <div className="border-t border-white/5 pt-4">
                 <CheckinTimeline checkins={checkins} />
               </div>
+            </div>
+
+            <div className="border border-slate-200 bg-white">
+              <div className="border-b border-slate-200 px-4 py-3"><h2 className="text-sm font-semibold text-slate-900">Activity</h2><p className="mt-0.5 text-xs text-slate-500">Latest operational events.</p></div>
+              <div className="max-h-64 divide-y divide-slate-100 overflow-y-auto px-4">
+                {checkins.slice().reverse().map(checkin => <div key={checkin.id} className="py-3"><p className="text-xs font-medium text-slate-800">{CHECKIN_EVENT_LABELS[checkin.event]}</p><p className="mt-1 text-[11px] text-slate-500">{new Date(checkin.timestamp).toLocaleString()} · {checkin.loggedBy}</p></div>)}
+                {!checkins.length && <p className="py-6 text-center text-xs text-slate-400">No events yet.</p>}
+              </div>
+            </div>
+
+            <div className="border border-slate-200 bg-white">
+              <div className="border-b border-slate-200 px-4 py-3"><h2 className="text-sm font-semibold text-slate-900">Profit box</h2></div>
+              <div className="space-y-2 px-4 py-4 text-xs"><div className="flex justify-between"><span className="text-slate-500">Total mile revenue</span><span className="font-mono font-semibold text-blue-700">{fmt$(load.rate)}</span></div><div className="flex justify-between border-t border-slate-100 pt-2"><span className="text-slate-500">Dispatch fee</span><span className="font-mono text-slate-700">-{fmt$(financialPreview.dispatchFeeAmount)}</span></div><div className="flex justify-between border-t border-slate-100 pt-2 font-semibold"><span className="text-slate-800">Carrier net</span><span className="font-mono text-emerald-600">{fmt$(financialPreview.carrierNet)}</span></div><div className="flex justify-between border-t border-slate-100 pt-2"><span className="text-slate-500">Margin</span><span className="font-mono text-slate-700">{load.rate ? ((financialPreview.dispatchFeeAmount / load.rate) * 100).toFixed(1) : '0.0'}%</span></div></div>
             </div>
 
           </div>
