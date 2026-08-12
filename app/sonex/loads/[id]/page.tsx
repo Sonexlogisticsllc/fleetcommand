@@ -110,20 +110,20 @@ function RouteMapWidget({ load }: { load: SonexLoad }) {
       </div>
 
       {/* Visual route line */}
-      <div className="h-28 rounded-xl border border-white/[0.04] bg-[#030712] relative flex flex-col justify-center px-6">
-        <div className="h-1 w-full bg-slate-800 rounded-full relative">
-          <div className="h-full bg-amber-500 rounded-full transition-all duration-1000" style={{ width: `${progressPercent}%` }} />
+      <div className="route-map-canvas h-32 rounded-lg relative flex flex-col justify-center px-7 overflow-hidden">
+        <div className="route-map-track h-1.5 w-full rounded-full relative">
+          <div className="route-map-progress h-full rounded-full transition-all duration-1000" style={{ width: `${progressPercent}%` }} />
           
           {/* Pickup Marker */}
-          <div className="absolute left-0 -top-1.5 w-4.5 h-4.5 rounded-full bg-amber-500 border-4 border-[#030712] flex items-center justify-center" title="Origin" />
+          <div className="route-map-origin absolute left-0 -top-2 w-5 h-5 rounded-full flex items-center justify-center" title="Origin" />
           
           {/* Delivery Marker */}
-          <div className="absolute right-0 -top-1.5 w-4.5 h-4.5 rounded-full bg-emerald-500 border-4 border-[#030712] flex items-center justify-center" title="Destination" />
+          <div className="route-map-destination absolute right-0 -top-2 w-5 h-5 rounded-full flex items-center justify-center" title="Destination" />
 
           {/* Moving Truck */}
           {progressPercent > 0 && progressPercent < 100 && (
             <div 
-              className="absolute -top-3 w-8 h-8 rounded-full bg-amber-400 text-black border border-amber-300 flex items-center justify-center shadow-lg shadow-amber-400/20 transition-all duration-1000 animate-bounce"
+              className="route-map-truck absolute -top-3 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-1000"
               style={{ left: `calc(${progressPercent}% - 16px)` }}
             >
               <Truck size={14} />
@@ -133,11 +133,11 @@ function RouteMapWidget({ load }: { load: SonexLoad }) {
 
         {/* City Route Labels */}
         <div className="flex justify-between items-center mt-6 text-xs">
-          <div className="text-left">
+          <div className="route-stop-card route-stop-card-origin text-left">
             <p className="font-semibold" style={{ color: '#f8fafc' }}>{load.pickupCity}, {load.pickupState}</p>
             <p className="text-[10px]" style={{ color: '#94a3b8' }}>Origin Facility</p>
           </div>
-          <div className="text-right">
+          <div className="route-stop-card route-stop-card-destination text-right">
             <p className="font-semibold" style={{ color: '#f8fafc' }}>{load.deliveryCity}, {load.deliveryState}</p>
             <p className="text-[10px]" style={{ color: '#94a3b8' }}>Consignee Destination</p>
           </div>
