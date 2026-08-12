@@ -12,7 +12,7 @@ import toast from 'react-hot-toast';
 import { useSonexAuth } from '@/lib/sonexAuth';
 import { FuelPriceWidget } from '@/components/sonex/FuelPriceWidget';
 import {
-  getLoadsByCarrier, getCheckins, addCheckin, updateLoad,
+  getLoadsByCarrier, getCheckins, addCheckinSafely, updateLoad,
   addCargoPhoto, getCargoPhotos, addLoad, getCarrier,
 } from '@/lib/sonexStore';
 import { uploadFile, uploadFiles } from '@/lib/storageUtils';
@@ -556,7 +556,21 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
     setLoading(true);
     setPendingEvent(null);
     try {
-      await addCheckin({ loadId: load.id, event, timestamp: new Date().toISOString(), notes, loggedBy: 'carrier' });
+      const result = await addCheckinSafely({ loadId: load.id, event, timestamp: new Date().toISOString(), notes, loggedBy: 'carrier' });
+      if (!result.ok) {
+        if (event === 'loaded_departing' && result.error.includes('BOL document')) {
+          setActiveTab('docs');
+          toast.error('Upload the signed BOL before marking the load as departed.');
+          return;
+        }
+        if (event === 'delivered' && result.error.includes('POD document')) {
+          setActiveTab('docs');
+          toast.error('Upload the signed POD before marking the load as delivered.');
+          return;
+        }
+        toast.error(result.error);
+        return;
+      }
       toast.success(`✓ ${CHECKIN_EVENT_LABELS[event]} logged!`, {
         style: { background: '#0D1F3C', color: '#FCD34D', border: '1px solid rgba(245,158,11,0.3)' },
       });
@@ -785,13 +799,25 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
               {/* Primary next button */}
               {nextEvent && (
                 <button
-                  onClick={() => ['detention_start','layover_start','tonu','breakdown','accident'].includes(nextEvent)
-                    ? setPendingEvent(nextEvent) : handleCheckin(nextEvent)}
+                  onClick={() => {
+                    if (nextEvent === 'loaded_departing' && !load.bolUrl) {
+                      setActiveTab('docs');
+                      toast.error('Upload the signed BOL before departing pickup.');
+                      return;
+                    }
+                    if (nextEvent === 'delivered' && !load.podUrl) {
+                      setActiveTab('docs');
+                      toast.error('Upload the signed POD before marking delivery complete.');
+                      return;
+                    }
+                    ['detention_start','layover_start','tonu','breakdown','accident'].includes(nextEvent)
+                      ? setPendingEvent(nextEvent) : handleCheckin(nextEvent);
+                  }}
                   disabled={loading}
                   className={`w-full rounded-2xl font-bold text-lg flex items-center justify-center gap-3 transition-all active:scale-[0.98] ${CHECKIN_CONFIGS[nextEvent].bg} ${CHECKIN_CONFIGS[nextEvent].color} ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
                   style={{ height: '60px', boxShadow: '0 8px 20px rgba(109,40,217,0.22)' }}>
                   {React.createElement(CHECKIN_CONFIGS[nextEvent].Icon, { size: 22 })}
-                  {loading ? 'Logging...' : CHECKIN_CONFIGS[nextEvent].label}
+                  {loading ? 'Logging...' : nextEvent === 'loaded_departing' && !load.bolUrl ? 'Upload BOL to Continue' : nextEvent === 'delivered' && !load.podUrl ? 'Upload POD to Continue' : CHECKIN_CONFIGS[nextEvent].label}
                 </button>
               )}
               {!nextEvent && doneEvents.has('delivered') && (

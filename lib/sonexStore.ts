@@ -739,6 +739,20 @@ export async function addCheckin(data: Omit<SonexLoadCheckin, 'id'>): Promise<So
   }
 }
 
+export async function addCheckinSafely(data: Omit<SonexLoadCheckin, 'id'>): Promise<
+  | { ok: true; checkin: SonexLoadCheckin }
+  | { ok: false; error: string }
+> {
+  try {
+    return { ok: true, checkin: await addCheckin(data) };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unable to save this check-in.',
+    };
+  }
+}
+
 // â”€â”€â”€ Cargo Photos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function getCargoPhotos(loadId: string): Promise<SonexCargoPhoto[]> {

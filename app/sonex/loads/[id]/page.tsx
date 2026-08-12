@@ -13,7 +13,7 @@ import toast from 'react-hot-toast';
 import { CheckinTimeline } from '@/components/sonex/CheckinTimeline';
 import { LoadStatusBadge, StatusPipeline } from '@/components/sonex/StatusPipeline';
 import {
-  addCheckin, getCarrier, getCarriers, getCheckins, getLoad,
+  addCheckinSafely, getCarrier, getCarriers, getCheckins, getLoad,
   updateLoad, deleteLoad,
 } from '@/lib/sonexStore';
 import { CheckinEvent, LoadStatus, SonexCarrier, SonexLoad, SonexLoadCheckin, computeLoadFinancials } from '@/lib/sonexTypes';
@@ -98,10 +98,10 @@ function RouteMapWidget({ load }: { load: SonexLoad }) {
   const progressPercent = currentIdx === -1 ? 0 : (currentIdx / (steps.length - 1)) * 100;
 
   return (
-    <div className="rounded-2xl border border-white/[0.05] bg-white/[0.02] p-5 space-y-4 relative overflow-hidden">
+    <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-4 relative overflow-hidden shadow-sm">
       <div className="flex justify-between items-center">
         <div>
-          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Live GPS Tracking Route</h3>
+          <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Live GPS Tracking Route</h3>
           <p className="text-xs text-slate-500 mt-0.5">{load.miles.toLocaleString()} miles transit distance</p>
         </div>
         <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider animate-pulse flex items-center gap-1">
@@ -134,12 +134,12 @@ function RouteMapWidget({ load }: { load: SonexLoad }) {
         {/* City Route Labels */}
         <div className="flex justify-between items-center mt-6 text-xs">
           <div className="text-left">
-            <p className="font-semibold text-white">{load.pickupCity}, {load.pickupState}</p>
-            <p className="text-[10px] text-slate-500">Origin Facility</p>
+            <p className="font-semibold" style={{ color: '#f8fafc' }}>{load.pickupCity}, {load.pickupState}</p>
+            <p className="text-[10px]" style={{ color: '#94a3b8' }}>Origin Facility</p>
           </div>
           <div className="text-right">
-            <p className="font-semibold text-white">{load.deliveryCity}, {load.deliveryState}</p>
-            <p className="text-[10px] text-slate-500">Consignee Destination</p>
+            <p className="font-semibold" style={{ color: '#f8fafc' }}>{load.deliveryCity}, {load.deliveryState}</p>
+            <p className="text-[10px]" style={{ color: '#94a3b8' }}>Consignee Destination</p>
           </div>
         </div>
       </div>
@@ -256,13 +256,17 @@ export default function LoadDetailPage() {
   };
 
   const handleCheckin = async (event: CheckinEvent) => {
-    await addCheckin({
+    const result = await addCheckinSafely({
       loadId: load.id,
       event,
       timestamp: new Date().toISOString(),
       notes: '',
       loggedBy: 'admin',
     });
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
     if (event === 'delivered' && LOAD_STATUS_ORDER.indexOf(load.status) < LOAD_STATUS_ORDER.indexOf('delivered')) {
       await updateLoad(load.id, { status: 'delivered' });
     }
@@ -342,10 +346,10 @@ export default function LoadDetailPage() {
             <select
               value={load.status}
               onChange={e => patch({ status: e.target.value as LoadStatus }, 'Dispatch status updated')}
-              className="rounded-xl border border-white/10 bg-[#0E1524] px-4 py-2.5 text-xs font-bold text-slate-200 focus:outline-none focus:border-amber-500/40"
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 focus:border-blue-500 focus:outline-none"
             >
               {LOAD_STATUS_ORDER.map(status => (
-                <option key={status} value={status} className="bg-[#0D1421]">{LOAD_STATUS_LABELS[status] || status}</option>
+                <option key={status} value={status}>{LOAD_STATUS_LABELS[status] || status}</option>
               ))}
             </select>
           </div>
@@ -766,11 +770,11 @@ export default function LoadDetailPage() {
                       set('carrierId', e.target.value || '');
                       if (nextCarrier) set('dispatchFeePercent', nextCarrier.dispatchFeePercent);
                     }}
-                    className="w-full rounded-xl border border-white/10 bg-[#0E1524] px-4 py-2.5 text-xs text-slate-200 focus:outline-none"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-xs text-slate-700 focus:border-blue-500 focus:outline-none"
                   >
-                    <option value="" className="bg-[#050B18]">-- Unassigned --</option>
+                    <option value="">-- Unassigned --</option>
                     {carriers.map(c => (
-                      <option key={c.id} value={c.id} className="bg-[#050B18]">
+                      <option key={c.id} value={c.id}>
                         {c.firstName} {c.lastName} ({EQUIPMENT_TYPE_LABELS[c.equipmentType]})
                       </option>
                     ))}

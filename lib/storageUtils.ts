@@ -14,6 +14,23 @@ export interface UploadResult {
   bucket: StorageBucket;
 }
 
+async function uploadThroughServerAction(
+  file: File,
+  bucket: StorageBucket,
+  pathPrefix: string,
+): Promise<UploadResult> {
+  const formData = new FormData();
+  formData.append('file', file, file.name);
+  formData.append('bucket', bucket);
+  formData.append('pathPrefix', pathPrefix);
+  const result = await uploadFileAction(formData);
+  return {
+    url: result.url,
+    path: result.path,
+    bucket: result.bucket as StorageBucket,
+  };
+}
+
 /**
  * Compresses an image file on the client side using HTML Canvas.
  * Downscales images larger than maxW/maxH and encodes at specified JPEG quality.
@@ -116,39 +133,29 @@ export async function uploadFile(
   if (!signingResponse.ok) throw new Error(signingResult.error || 'The upload could not be prepared.');
 
   if (signingResult.mode === 'direct') {
-    let directResponse: Response;
     try {
-      directResponse = await fetch(signingResult.uploadUrl, {
+      const directResponse = await fetch(signingResult.uploadUrl, {
         method: 'PUT',
         headers: { 'Content-Type': contentType },
         body: optimizedFile,
       });
+      if (directResponse.ok) {
+        return {
+          url: signingResult.url,
+          path: signingResult.path,
+          bucket: signingResult.bucket as StorageBucket,
+        };
+      }
     } catch {
-      throw new Error('Secure storage could not be reached. Verify the R2 browser upload CORS policy.');
+      // Some browsers block a direct S3-compatible upload when an R2 CORS rule
+      // has not propagated. The authenticated Server Action uses the same bucket
+      // credentials without requiring a cross-origin browser request.
     }
-    if (!directResponse.ok) {
-      throw new Error(`Secure storage rejected the upload (${directResponse.status}).`);
-    }
-    return {
-      url: signingResult.url,
-      path: signingResult.path,
-      bucket: signingResult.bucket as StorageBucket,
-    };
+    const serverFile = optimizedFile instanceof File ? optimizedFile : file;
+    return uploadThroughServerAction(serverFile, bucket, pathPrefix);
   }
 
-  const formData = new FormData();
-  // Next Server Actions serialize native File objects reliably. A canvas-created
-  // Blob can be rejected by that transport, so the local/server fallback keeps
-  // the original image while direct R2 uploads still use the compressed version.
-  formData.append('file', file, file.name);
-  formData.append('bucket', bucket);
-  formData.append('pathPrefix', pathPrefix);
-  const result = await uploadFileAction(formData);
-  return {
-    url: result.url,
-    path: result.path,
-    bucket: result.bucket as StorageBucket,
-  };
+  return uploadThroughServerAction(file, bucket, pathPrefix);
 }
 
 /**
