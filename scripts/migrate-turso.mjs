@@ -7,6 +7,8 @@ const migrations = [
   ['0002_add_tms_operations', 'drizzle/0002_add_tms_operations.sql'],
   ['0003_add_load_dispatch_assignments', 'drizzle/0003_add_load_dispatch_assignments.sql'],
   ['0004_add_driver_pay_profiles', 'drizzle/0004_add_driver_pay_profiles.sql'],
+  ['0005_add_quo_communication_events', 'drizzle/0005_add_quo_communication_events.sql'],
+  ['0006_remove_quo_communication_events', 'drizzle/0006_remove_quo_communication_events.sql'],
 ];
 
 const databaseUrl = process.env.TURSO_DATABASE_URL;

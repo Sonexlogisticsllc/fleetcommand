@@ -4,12 +4,12 @@ import React, { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
-  Truck, DollarSign, User, Bell, ChevronRight, LogOut, Activity
+  Truck, DollarSign, User, LogOut
 } from 'lucide-react';
 import { useSonexAuth } from '@/lib/sonexAuth';
 import { NotificationBell } from '@/components/sonex/NotificationBell';
-import { DatatruckMark } from '@/components/sonex/DatatruckMark';
-import { getCarrier, getLoadsByCarrier } from '@/lib/sonexStore';
+import { SonexMark } from '@/components/sonex/SonexMark';
+import { getCarrier } from '@/lib/sonexStore';
 import type { SonexCarrier } from '@/lib/sonexTypes';
 
 function statusColor(status: string) {
@@ -29,12 +29,11 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
   const router = useRouter();
   const pathname = usePathname();
 
-  const handleLogout = () => {
-    logout();
-    router.push('/sonex/login');
+  const handleLogout = async () => {
+    await logout();
+    window.location.assign('/sonex/login');
   };
   const [carrier, setCarrier] = useState<SonexCarrier | undefined>(undefined);
-  const [activeLoadId, setActiveLoadId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated || !isCarrier) {
@@ -43,16 +42,6 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
     }
     if (user?.carrierId) {
       getCarrier(user.carrierId).then(setCarrier);
-      
-      // Look up active transit load to populate workspace tab
-      getLoadsByCarrier(user.carrierId).then(loads => {
-        const active = loads.find(l => ['booked', 'dispatched', 'in_transit'].includes(l.status));
-        if (active) {
-          setActiveLoadId(active.id);
-        } else {
-          setActiveLoadId(null);
-        }
-      });
     }
   }, [isAuthenticated, isCarrier, user, router]);
 
@@ -74,7 +63,6 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
 
   const menuItems = [
     { label: 'Loads',    href: '/carrier',           Icon: Truck },
-    ...(activeLoadId ? [{ label: 'Workspace', href: `/carrier/loads/${activeLoadId}`, Icon: Activity }] : []),
     { label: 'Earnings', href: '/carrier/earnings',   Icon: DollarSign },
     { label: 'Profile',  href: '/carrier/profile',    Icon: User },
   ];
@@ -86,7 +74,7 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
   }
 
   return (
-    <div data-portal="carrier" data-tms-surface className="min-h-screen bg-[#f2f5f9]">
+    <div data-portal="carrier" data-tms-surface className="min-h-screen bg-[#090d16]">
 
       {/* ── Mobile top header ────────────────────────────────────────────── */}
       <header className="lg:hidden fixed top-0 inset-x-0 z-40 flex items-center justify-between px-4 h-14 border-b border-slate-800 bg-[#0f172a]">
@@ -100,19 +88,20 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
       </header>
 
       {/* ── Desktop sidebar ──────────────────────────────────────────────── */}
-      <aside className="hidden lg:flex flex-col fixed inset-y-0 left-0 w-[84px] z-40 bg-gradient-to-b from-[#8d42c9] via-[#6847d2] to-[#2f66d5] text-white">
+      <aside className="hidden lg:flex flex-col fixed inset-y-0 left-0 w-[232px] z-40 border-r border-slate-800 bg-[#0c1627] text-white">
         {/* Brand */}
-        <div className="flex h-[72px] items-center justify-center border-b border-white/15">
-          <DatatruckMark />
+        <div className="flex h-14 items-center gap-3 border-b border-slate-800 px-5">
+          <SonexMark />
+          <div><p className="text-sm font-bold tracking-[0.12em] text-white">SONEX</p><p className="text-[10px] text-slate-400">Carrier workspace</p></div>
         </div>
 
         {/* Carrier identity */}
-        <div className="flex justify-center border-b border-white/15 px-2 py-3">
+        <div className="border-b border-slate-800 px-4 py-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center bg-white/20 text-[11px] font-semibold text-white">
+            <div className="flex h-9 w-9 items-center justify-center bg-sky-500 text-[11px] font-semibold text-slate-950">
               {initials}
             </div>
-            <div className="hidden min-w-0 flex-1">
+            <div className="min-w-0 flex-1">
               <div className="text-white text-sm font-semibold truncate">{carrierName}</div>
               {carrier && (
                 <div className={`text-xs font-medium ${statusColor(carrier.status)}`}>
@@ -125,56 +114,55 @@ export default function CarrierLayout({ children }: { children: React.ReactNode 
         </div>
 
         {/* Nav items */}
-        <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-3">
+        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
           {menuItems.map(({ label, href, Icon }) => {
             const active = isActive(href);
             return (
               <Link key={href} href={href}
-                className={`group relative flex h-12 items-center justify-center text-[13px] font-medium transition-colors ${
+                className={`group relative flex h-10 items-center gap-3 px-3 text-[13px] font-medium transition-colors ${
                   active
-                    ? 'bg-white/20 text-white'
-                    : 'text-white/75 hover:bg-white/10 hover:text-white'
+                    ? 'bg-sky-500/15 text-sky-300'
+                    : 'text-slate-400 hover:bg-white/[0.04] hover:text-white'
                 }`}>
                 {active && (
-                  <span className="absolute bottom-0 left-0 top-0 w-0.5 bg-white" />
+                  <span className="absolute bottom-0 left-0 top-0 w-0.5 bg-sky-400" />
                 )}
-                <Icon size={22} strokeWidth={1.8} className="text-white" />
-                <span className="sr-only">{label}</span>
+                <Icon size={19} strokeWidth={1.8} />
+                <span>{label}</span>
               </Link>
             );
           })}
         </nav>
 
         {/* Sign Out */}
-        <div className="border-t border-white/15 px-2 py-2">
+        <div className="border-t border-slate-800 px-3 py-3">
           <button
             onClick={handleLogout}
-            className="flex h-10 w-full items-center justify-center text-white/75 hover:bg-white/10 hover:text-white"
+            className="flex h-10 w-full items-center gap-3 px-3 text-sm text-slate-400 hover:bg-white/[0.04] hover:text-white"
           >
             <LogOut size={16} className="shrink-0" />
-            <span className="sr-only">Sign Out</span>
+            <span>Sign out</span>
           </button>
         </div>
 
         {/* Footer hint */}
-        <div className="border-t border-white/15 px-2 py-3">
-          <div className="text-center text-[9px] text-white/70">SONEX</div>
+        <div className="border-t border-slate-800 px-4 py-3">
+          <div className="text-[10px] text-slate-500">Sonex Dispatch</div>
         </div>
       </aside>
 
       {/* ── Main content ─────────────────────────────────────────────────── */}
-      <main className="min-h-screen pb-20 pt-14 lg:pl-[84px] lg:pt-0 lg:pb-0">
-        <div className="hidden h-[72px] items-center gap-4 bg-gradient-to-r from-[#8b3fc5] via-[#6b46d2] to-[#405bd9] px-5 text-white lg:flex">
-          <span className="text-[20px] font-medium">Carrier portal</span>
-          <div className="ml-auto flex items-center gap-4"><span className="rounded-full border border-white/80 px-4 py-2 text-sm">Live Support</span><span>Datatruck 1.0⌄</span><NotificationBell role="carrier" carrierId={user?.carrierId} /><User size={22} /></div>
-          <span className="text-emerald-400">● System operational</span>
+      <main className="min-h-screen pb-20 pt-14 lg:pl-[232px] lg:pt-0 lg:pb-0">
+        <div className="hidden h-14 items-center gap-4 border-b border-slate-800 bg-[#0f1b2f] px-6 text-white lg:flex">
+          <span className="text-sm font-semibold">Carrier workspace</span>
+          <span className="text-xs text-slate-400">Loads, paperwork, and settlement status</span>
+          <div className="ml-auto flex items-center gap-4"><NotificationBell role="carrier" carrierId={user?.carrierId} /><Link href="/carrier/profile" title="Profile" className="grid h-8 w-8 place-items-center text-slate-400 hover:bg-white/5 hover:text-white"><User size={18} /></Link></div>
         </div>
         {children}
       </main>
 
       {/* ── Mobile bottom tab bar ────────────────────────────────────────── */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 h-16 flex items-stretch"
-        style={{ background: '#0F0F0F', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 h-16 flex items-stretch border-t border-slate-200 bg-white">
         {menuItems.map(({ label, href, Icon }) => {
           const active = isActive(href);
           return (

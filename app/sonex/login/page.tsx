@@ -38,20 +38,19 @@ export default function SonexLoginPage() {
   };
 
   return (
-    <div
-      data-portal="sonex"
-      className="min-h-screen bg-[#080808] px-4 py-8 flex items-center justify-center"
-    >
-      <div className="w-full max-w-md animate-slide-in-up">
-        <div className="glass-card-elevated rounded-[20px] p-8">
-          <div className="mb-8 text-center">
-            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-amber-500/30 bg-amber-500/10 shadow-amber-glow">
-              <Truck size={28} className="text-amber-400" />
-            </div>
-            <h1 className="font-display text-2xl font-black tracking-[0.22em] text-white">
-              SONEX
-            </h1>
-            <p className="mt-2 text-sm font-medium text-slate-500">Dispatch Hub</p>
+    <div className="grid min-h-screen bg-[#08111f] lg:grid-cols-[1.1fr_0.9fr]">
+      <section className="relative hidden overflow-hidden lg:block" style={{ backgroundImage: "linear-gradient(90deg, rgba(7,17,31,0.2), rgba(7,17,31,0.88)), url('https://images.unsplash.com/photo-1737768041497-bf19668eeb1a?auto=format&fit=crop&fm=jpg&q=82&w=2400')", backgroundPosition: 'center', backgroundSize: 'cover' }}>
+        <div className="absolute inset-x-12 top-11 flex items-center gap-3"><div className="grid h-10 w-10 place-items-center bg-sky-500 text-slate-950"><Truck size={21} /></div><span className="text-xl font-bold tracking-[0.12em] text-white">SONEX</span></div>
+        <div className="absolute bottom-14 left-12 max-w-lg"><p className="text-xs font-semibold uppercase tracking-[0.22em] text-sky-300">Transportation management</p><h1 className="mt-4 text-4xl font-semibold leading-tight text-white">Move every load with a clear operational view.</h1><p className="mt-4 max-w-md text-sm leading-6 text-slate-200">Dispatch, paperwork, settlements, and carrier updates in one secure Sonex workspace.</p></div>
+      </section>
+      <main className="flex items-center justify-center px-5 py-10 sm:px-10">
+        <div className="w-full max-w-md animate-slide-in-up">
+          <div className="mb-9 lg:hidden"><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center bg-sky-500 text-slate-950"><Truck size={20} /></div><div><p className="text-lg font-bold tracking-[0.12em] text-white">SONEX</p><p className="text-xs text-slate-400">Dispatch Hub</p></div></div></div>
+          <div className="border border-slate-700 bg-[#0d1929] p-7 shadow-2xl shadow-black/25 sm:p-8">
+          <div className="mb-8">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-300">Secure sign in</p>
+            <h2 className="mt-2 text-2xl font-semibold text-white">Welcome back</h2>
+            <p className="mt-2 text-sm text-slate-400">Use the credentials assigned by Sonex Dispatch.</p>
           </div>
 
           {error && (
@@ -109,13 +108,14 @@ export default function SonexLoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="btn-primary mt-2 w-full py-3.5 font-bold"
+              className="mt-2 flex w-full items-center justify-center bg-sky-500 py-3.5 text-sm font-semibold text-slate-950 transition-colors hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading ? 'Signing in...' : 'Sign In'}
             </button>
           </form>
+          </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

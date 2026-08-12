@@ -90,20 +90,59 @@ export async function uploadFile(
   bucket: StorageBucket,
   pathPrefix: string = '',
 ): Promise<UploadResult> {
-  let fileToUpload: File | Blob = file;
+  let optimizedFile: File | Blob = file;
   if (file.type.startsWith('image/')) {
     try {
-      fileToUpload = await compressImage(file);
+      optimizedFile = await compressImage(file);
     } catch (e) {
       console.warn('Image compression failed, uploading original:', e);
     }
   }
 
+  const uploadName = optimizedFile instanceof File ? optimizedFile.name : file.name;
+  const contentType = optimizedFile.type || file.type || 'application/octet-stream';
+  const signingResponse = await fetch('/api/storage/presign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      bucket,
+      contentType,
+      fileName: uploadName,
+      pathPrefix,
+      size: optimizedFile.size,
+    }),
+  });
+  const signingResult = await signingResponse.json();
+  if (!signingResponse.ok) throw new Error(signingResult.error || 'The upload could not be prepared.');
+
+  if (signingResult.mode === 'direct') {
+    let directResponse: Response;
+    try {
+      directResponse = await fetch(signingResult.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': contentType },
+        body: optimizedFile,
+      });
+    } catch {
+      throw new Error('Secure storage could not be reached. Verify the R2 browser upload CORS policy.');
+    }
+    if (!directResponse.ok) {
+      throw new Error(`Secure storage rejected the upload (${directResponse.status}).`);
+    }
+    return {
+      url: signingResult.url,
+      path: signingResult.path,
+      bucket: signingResult.bucket as StorageBucket,
+    };
+  }
+
   const formData = new FormData();
-  formData.append('file', fileToUpload, file.name);
+  // Next Server Actions serialize native File objects reliably. A canvas-created
+  // Blob can be rejected by that transport, so the local/server fallback keeps
+  // the original image while direct R2 uploads still use the compressed version.
+  formData.append('file', file, file.name);
   formData.append('bucket', bucket);
   formData.append('pathPrefix', pathPrefix);
-
   const result = await uploadFileAction(formData);
   return {
     url: result.url,
@@ -120,10 +159,16 @@ export async function uploadFiles(
   bucket: StorageBucket,
   pathPrefix: string = '',
 ): Promise<UploadResult[]> {
-  const results: UploadResult[] = [];
-  for (const file of files) {
-    results.push(await uploadFile(file, bucket, pathPrefix));
-  }
+  const results = new Array<UploadResult>(files.length);
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(2, files.length) }, async () => {
+    while (nextIndex < files.length) {
+      const index = nextIndex++;
+      results[index] = await uploadFile(files[index], bucket, pathPrefix);
+    }
+  });
+
+  await Promise.all(workers);
   return results;
 }
 

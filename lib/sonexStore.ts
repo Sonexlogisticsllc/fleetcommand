@@ -3,7 +3,7 @@
 
 import { db } from '../db/client';
 import * as schema from '../db/schema';
-import { eq, desc, and, inArray, sql, count, sum, avg, gte } from 'drizzle-orm';
+import { eq, desc, and, inArray, count, sum, avg, gte } from 'drizzle-orm';
 import { hash } from '@node-rs/argon2';
 import crypto from 'crypto';
 import { getCurrentUserAction } from './authActions';
@@ -11,18 +11,51 @@ import { getCurrentUserAction } from './authActions';
 
 import {
   SonexCarrier, SonexLoad, SonexLoadCheckin, SonexCargoPhoto,
-  SonexSettlement, SonexSettings,
+  SonexSettlement, SonexSettings, SonexUser,
   computeLoadFinancials, LoadStatus, CheckinEvent,
 } from './sonexTypes';
+
+async function requireUser(): Promise<SonexUser> {
+  const user = await getCurrentUserAction();
+  if (!user) throw new Error('Your session has expired. Please sign in again.');
+  return user;
+}
+
+async function requireAdminUser(): Promise<SonexUser> {
+  const user = await requireUser();
+  if (user.role !== 'admin') throw new Error('Dispatcher authorization required.');
+  return user;
+}
+
+async function requireCarrierAccess(carrierId: string): Promise<SonexUser> {
+  const user = await requireUser();
+  if (user.role === 'admin') return user;
+  if (user.role !== 'carrier' || user.carrierId !== carrierId) {
+    throw new Error('You do not have permission to access this carrier.');
+  }
+  return user;
+}
+
+async function requireLoadAccess(loadId: string) {
+  const user = await requireUser();
+  const [load] = await db.select().from(schema.loads).where(eq(schema.loads.id, loadId)).limit(1);
+  if (!load) throw new Error('Load not found.');
+  if (user.role !== 'admin' && (user.role !== 'carrier' || user.carrierId !== load.carrierId)) {
+    throw new Error('You do not have permission to access this load.');
+  }
+  return { user, load };
+}
 
 // â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 async function generateLoadNumber(existingLoads: SonexLoad[]): Promise<string> {
   const year = new Date().getFullYear();
+  const pattern = new RegExp(`^SNX-${year}-(\\d+)$`);
   const existing = existingLoads
-    .map(l => parseInt(l.loadNumber.split('-').pop() || '0'))
-    .filter(n => !isNaN(n));
+    .map(load => load.loadNumber.match(pattern)?.[1])
+    .map(value => value ? Number.parseInt(value, 10) : Number.NaN)
+    .filter(Number.isFinite);
   const next = existing.length > 0 ? Math.max(...existing) + 1 : 1;
   return `SNX-${year}-${String(next).padStart(3, '0')}`;
 }
@@ -126,6 +159,7 @@ function mapDbLoad(l: typeof schema.loads.$inferSelect): SonexLoad {
 
 export async function getCarriers(): Promise<SonexCarrier[]> {
   try {
+    await requireAdminUser();
     const list = await db.select().from(schema.carriers).orderBy(desc(schema.carriers.joinedAt));
     return list.map(mapDbCarrier);
   } catch (err) {
@@ -136,6 +170,7 @@ export async function getCarriers(): Promise<SonexCarrier[]> {
 
 export async function getCarrier(id: string): Promise<SonexCarrier | undefined> {
   try {
+    await requireCarrierAccess(id);
     const results = await db.select().from(schema.carriers).where(eq(schema.carriers.id, id)).limit(1);
     if (results.length === 0) return undefined;
     return mapDbCarrier(results[0]);
@@ -152,6 +187,7 @@ export async function createCarrierPortalUser(
   displayName: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    await requireAdminUser();
     const userId = crypto.randomUUID();
     const passwordHash = await hash(password);
     const avatar = displayName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2);
@@ -173,10 +209,54 @@ export async function createCarrierPortalUser(
   }
 }
 
+export type CarrierPortalAccount = {
+  userId: string;
+  carrierId: string;
+  displayName: string;
+  email: string;
+  carrierName: string;
+  status: string;
+};
+
+export async function getCarrierPortalAccounts(): Promise<CarrierPortalAccount[]> {
+  await requireAdminUser();
+  const rows = await db.select({
+    userId: schema.users.id,
+    carrierId: schema.users.carrierId,
+    displayName: schema.users.displayName,
+    email: schema.users.email,
+    firstName: schema.carriers.firstName,
+    lastName: schema.carriers.lastName,
+    status: schema.carriers.status,
+  }).from(schema.users)
+    .innerJoin(schema.carriers, eq(schema.users.carrierId, schema.carriers.id))
+    .where(eq(schema.users.role, 'carrier'))
+    .orderBy(schema.carriers.firstName, schema.carriers.lastName);
+
+  return rows.map(row => ({
+    userId: row.userId,
+    carrierId: row.carrierId!,
+    displayName: row.displayName,
+    email: row.email,
+    carrierName: `${row.firstName} ${row.lastName}`,
+    status: row.status,
+  }));
+}
+
+export async function resetCarrierPortalPassword(userId: string, password: string): Promise<void> {
+  await requireAdminUser();
+  if (password.length < 10) throw new Error('Use a password with at least 10 characters.');
+  const [account] = await db.select({ id: schema.users.id, role: schema.users.role }).from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+  if (!account || account.role !== 'carrier') throw new Error('Carrier portal account not found.');
+
+  await db.update(schema.users).set({ passwordHash: await hash(password), updatedAt: new Date().toISOString() }).where(eq(schema.users.id, userId));
+}
+
 export async function addCarrier(
   data: Omit<SonexCarrier, 'id' | 'joinedAt' | 'updatedAt'> & { portalPassword?: string }
 ): Promise<SonexCarrier> {
   try {
+    await requireAdminUser();
     const { portalPassword, ...carrierData } = data as any;
     const carrierId = crypto.randomUUID();
 
@@ -210,7 +290,8 @@ export async function addCarrier(
       const displayName = `${carrierData.firstName} ${carrierData.lastName}`;
       const result = await createCarrierPortalUser(carrierId, carrierData.portalEmail, portalPassword, displayName);
       if (!result.success) {
-        console.warn('Carrier created but portal login failed:', result.error);
+        await db.delete(schema.carriers).where(eq(schema.carriers.id, carrierId));
+        throw new Error(`Carrier login could not be created: ${result.error ?? 'Unknown error'}`);
       }
     }
 
@@ -225,6 +306,17 @@ export async function addCarrier(
 
 export async function updateCarrier(id: string, data: Partial<SonexCarrier>): Promise<SonexCarrier | null> {
   try {
+    const user = await requireCarrierAccess(id);
+    if (user.role === 'carrier') {
+      data = {
+        phone: data.phone,
+        email: data.email,
+        address: data.address,
+        city: data.city,
+        state: data.state,
+        zip: data.zip,
+      };
+    }
     const updateData: any = {};
     if (data.firstName !== undefined) updateData.firstName = data.firstName;
     if (data.lastName !== undefined) updateData.lastName = data.lastName;
@@ -259,6 +351,7 @@ export async function updateCarrier(id: string, data: Partial<SonexCarrier>): Pr
 
 export async function deleteCarrier(id: string): Promise<void> {
   try {
+    await requireAdminUser();
     await db.delete(schema.carriers).where(eq(schema.carriers.id, id));
   } catch (err) {
     console.error('Error deleting carrier:', err);
@@ -270,6 +363,7 @@ export async function deleteCarrier(id: string): Promise<void> {
 
 export async function getLoads(): Promise<SonexLoad[]> {
   try {
+    await requireAdminUser();
     const list = await db.select().from(schema.loads).orderBy(desc(schema.loads.createdAt));
     return list.map(mapDbLoad);
   } catch (err) {
@@ -280,9 +374,8 @@ export async function getLoads(): Promise<SonexLoad[]> {
 
 export async function getLoad(id: string): Promise<SonexLoad | undefined> {
   try {
-    const results = await db.select().from(schema.loads).where(eq(schema.loads.id, id)).limit(1);
-    if (results.length === 0) return undefined;
-    return mapDbLoad(results[0]);
+    const { load } = await requireLoadAccess(id);
+    return mapDbLoad(load);
   } catch (err) {
     console.error('Error fetching load:', err);
     return undefined;
@@ -291,6 +384,7 @@ export async function getLoad(id: string): Promise<SonexLoad | undefined> {
 
 export async function getLoadsByCarrier(carrierId: string): Promise<SonexLoad[]> {
   try {
+    await requireCarrierAccess(carrierId);
     const list = await db.select().from(schema.loads).where(eq(schema.loads.carrierId, carrierId)).orderBy(desc(schema.loads.createdAt));
     return list.map(mapDbLoad);
   } catch (err) {
@@ -306,15 +400,42 @@ export async function addLoad(
   }
 ): Promise<SonexLoad> {
   try {
+    const user = await requireUser();
+    if (user.role !== 'admin' && (user.role !== 'carrier' || user.carrierId !== data.carrierId)) {
+      throw new Error('You do not have permission to create a load for this carrier.');
+    }
     const { dispatchFeeAmount, carrierNet, ratePerMile } = await computeLoadFinancials(data.rate, data.miles, data.dispatchFeePercent);
-    const existing = await getLoads();
+    const existing = (await db.select().from(schema.loads)).map(mapDbLoad);
     const loadNumber = await generateLoadNumber(existing);
     const id = crypto.randomUUID();
+
+    let driverId = data.driverId;
+    let equipmentId = data.equipmentId;
+    if (user.role === 'carrier') {
+      const [linkedDriver] = await db.select({ id: schema.carrierDrivers.id })
+        .from(schema.carrierDrivers)
+        .where(and(eq(schema.carrierDrivers.carrierId, data.carrierId), eq(schema.carrierDrivers.userId, user.id)))
+        .limit(1);
+      driverId = driverId ?? linkedDriver?.id;
+    }
+    if (!equipmentId) {
+      const [activeTruck] = await db.select({ id: schema.carrierEquipment.id })
+        .from(schema.carrierEquipment)
+        .where(and(
+          eq(schema.carrierEquipment.carrierId, data.carrierId),
+          eq(schema.carrierEquipment.type, 'truck'),
+          eq(schema.carrierEquipment.status, 'active'),
+        ))
+        .limit(1);
+      equipmentId = activeTruck?.id;
+    }
 
     await db.insert(schema.loads).values({
       id,
       loadNumber,
       carrierId: data.carrierId,
+      driverId,
+      equipmentId,
       brokerName: data.brokerName,
       brokerContact: data.brokerContact,
       brokerPhone: data.brokerPhone,
@@ -364,8 +485,14 @@ export async function addLoad(
 
 export async function updateLoad(id: string, data: Partial<SonexLoad>): Promise<SonexLoad | null> {
   try {
-    const current = await getLoad(id);
-    if (!current) return null;
+    const access = await requireLoadAccess(id);
+    const current = mapDbLoad(access.load);
+    const isAdmin = access.user.role === 'admin';
+    if (!isAdmin) {
+      const carrierFields = new Set(['status', 'bolUrl', 'podUrl']);
+      const forbidden = Object.keys(data).filter(key => !carrierFields.has(key));
+      if (forbidden.length) throw new Error('Carriers can update status, BOL, and POD fields only.');
+    }
 
     const updated = { ...current, ...data };
     
@@ -379,14 +506,11 @@ export async function updateLoad(id: string, data: Partial<SonexLoad>): Promise<
     }
 
     if (data.status && data.status !== current.status) {
-      const currentUser = await getCurrentUserAction();
-      const isAdmin = currentUser?.role === 'admin';
-
       if (!isAdmin) {
         const allowedTransitions: Record<LoadStatus, LoadStatus[]> = {
           booked: ['dispatched'],
           dispatched: ['booked', 'in_transit'],
-          in_transit: ['dispatched', 'delivered'],
+          in_transit: ['dispatched', 'delivered', 'pod_received'],
           delivered: ['in_transit', 'pod_received'],
           pod_received: ['delivered', 'invoiced'],
           invoiced: ['pod_received', 'paid'],
@@ -397,6 +521,16 @@ export async function updateLoad(id: string, data: Partial<SonexLoad>): Promise<
         if (!allowed.includes(data.status)) {
           throw new Error(`Invalid status transition from "${current.status}" to "${data.status}".`);
         }
+        if (data.status === 'pod_received' && current.status === 'in_transit') {
+          if (!data.podUrl) throw new Error('A POD document is required before marking POD received.');
+          const deliveryCheckins = await db.select({ id: schema.loadCheckins.id })
+            .from(schema.loadCheckins)
+            .where(and(eq(schema.loadCheckins.loadId, id), eq(schema.loadCheckins.event, 'arrived_delivery')))
+            .limit(1);
+          if (!deliveryCheckins.length) {
+            throw new Error('Arrived at delivery must be logged before submitting POD.');
+          }
+        }
       }
 
       // Log audit checkin for status change
@@ -406,7 +540,7 @@ export async function updateLoad(id: string, data: Partial<SonexLoad>): Promise<
         event: `status_${data.status}` as any,
         timestamp: new Date().toISOString(),
         notes: `Status transitioned from "${current.status}" to "${data.status}".`,
-        loggedBy: 'admin',
+        loggedBy: access.user.role,
       });
     }
 
@@ -463,6 +597,7 @@ export async function updateLoad(id: string, data: Partial<SonexLoad>): Promise<
 
 export async function deleteLoad(id: string): Promise<void> {
   try {
+    await requireAdminUser();
     await db.delete(schema.loads).where(eq(schema.loads.id, id));
   } catch (err) {
     console.error('Error deleting load:', err);
@@ -474,6 +609,7 @@ export async function deleteLoad(id: string): Promise<void> {
 
 export async function getCheckins(loadId: string): Promise<SonexLoadCheckin[]> {
   try {
+    await requireLoadAccess(loadId);
     const list = await db.select().from(schema.loadCheckins).where(eq(schema.loadCheckins.loadId, loadId)).orderBy(schema.loadCheckins.timestamp);
     return list.map(c => ({
       id: c.id,
@@ -537,6 +673,7 @@ export async function recalculateDetention(loadId: string): Promise<void> {
 
 export async function addCheckin(data: Omit<SonexLoadCheckin, 'id'>): Promise<SonexLoadCheckin> {
   try {
+    const access = await requireLoadAccess(data.loadId);
     // Validate sequential core check-ins
     const coreEvents: CheckinEvent[] = ['arrived_pickup', 'loaded_departing', 'arrived_delivery', 'delivered'];
     if (coreEvents.includes(data.event)) {
@@ -553,17 +690,11 @@ export async function addCheckin(data: Omit<SonexLoadCheckin, 'id'>): Promise<So
       }
       
       // Enforce file requirements
-      const loadRecord = await db.select().from(schema.loads)
-        .where(eq(schema.loads.id, data.loadId))
-        .limit(1);
-      
-      if (loadRecord.length > 0) {
-        if (data.event === 'loaded_departing' && !loadRecord[0].bolUrl) {
-          throw new Error('BOL document is required before departing pickup.');
-        }
-        if (data.event === 'delivered' && !loadRecord[0].podUrl) {
-          throw new Error('POD document is required before marking load as delivered.');
-        }
+      if (data.event === 'loaded_departing' && !access.load.bolUrl) {
+        throw new Error('BOL document is required before departing pickup.');
+      }
+      if (data.event === 'delivered' && !access.load.podUrl) {
+        throw new Error('POD document is required before marking load as delivered.');
       }
     }
 
@@ -574,7 +705,7 @@ export async function addCheckin(data: Omit<SonexLoadCheckin, 'id'>): Promise<So
       event: data.event,
       timestamp: data.timestamp || new Date().toISOString(),
       notes: data.notes,
-      loggedBy: data.loggedBy,
+      loggedBy: access.user.role,
     });
 
     // Recalculate detention on checkout
@@ -600,7 +731,7 @@ export async function addCheckin(data: Omit<SonexLoadCheckin, 'id'>): Promise<So
       event: data.event,
       timestamp: data.timestamp || new Date().toISOString(),
       notes: data.notes,
-      loggedBy: data.loggedBy,
+      loggedBy: access.user.role,
     };
   } catch (err) {
     console.error('Error adding check-in:', err);
@@ -612,6 +743,7 @@ export async function addCheckin(data: Omit<SonexLoadCheckin, 'id'>): Promise<So
 
 export async function getCargoPhotos(loadId: string): Promise<SonexCargoPhoto[]> {
   try {
+    await requireLoadAccess(loadId);
     const list = await db.select().from(schema.cargoPhotos).where(eq(schema.cargoPhotos.loadId, loadId)).orderBy(schema.cargoPhotos.uploadedAt);
     return list.map(p => ({
       id: p.id,
@@ -630,6 +762,7 @@ export async function getCargoPhotos(loadId: string): Promise<SonexCargoPhoto[]>
 
 export async function addCargoPhoto(data: Omit<SonexCargoPhoto, 'id'>): Promise<SonexCargoPhoto> {
   try {
+    const access = await requireLoadAccess(data.loadId);
     const id = crypto.randomUUID();
     await db.insert(schema.cargoPhotos).values({
       id,
@@ -638,7 +771,7 @@ export async function addCargoPhoto(data: Omit<SonexCargoPhoto, 'id'>): Promise<
       stage: data.stage,
       caption: data.caption,
       uploadedAt: data.uploadedAt || new Date().toISOString(),
-      uploadedBy: data.uploadedBy,
+      uploadedBy: access.user.role,
     });
 
     return {
@@ -648,7 +781,7 @@ export async function addCargoPhoto(data: Omit<SonexCargoPhoto, 'id'>): Promise<
       stage: data.stage,
       caption: data.caption,
       uploadedAt: data.uploadedAt || new Date().toISOString(),
-      uploadedBy: data.uploadedBy,
+      uploadedBy: access.user.role,
     };
   } catch (err) {
     console.error('Error adding cargo photo:', err);
@@ -664,6 +797,8 @@ export async function addCargoPhoto(data: Omit<SonexCargoPhoto, 'id'>): Promise<
 
 export async function getSettlements(carrierId?: string): Promise<SonexSettlement[]> {
   try {
+    if (carrierId) await requireCarrierAccess(carrierId);
+    else await requireAdminUser();
     let list;
     if (carrierId) {
       list = await db.select().from(schema.settlements).where(eq(schema.settlements.carrierId, carrierId)).orderBy(desc(schema.settlements.generatedAt));
@@ -689,6 +824,7 @@ export async function getSettlements(carrierId?: string): Promise<SonexSettlemen
 
 export async function addSettlement(data: Omit<SonexSettlement, 'id'>): Promise<SonexSettlement> {
   try {
+    await requireAdminUser();
     const id = crypto.randomUUID();
     const loadIdsStr = data.loadIds.join(',');
 
@@ -725,6 +861,7 @@ export async function addSettlement(data: Omit<SonexSettlement, 'id'>): Promise<
 
 export async function getSettings(): Promise<SonexSettings> {
   try {
+    await requireAdminUser();
     const results = await db.select().from(schema.settings).where(eq(schema.settings.id, 1)).limit(1);
     if (results.length === 0) {
       return {
@@ -769,6 +906,7 @@ export async function getSettings(): Promise<SonexSettings> {
 
 export async function updateSettings(data: Partial<SonexSettings>): Promise<SonexSettings> {
   try {
+    await requireAdminUser();
     const current = await getSettings();
     const updated = { ...current, ...data };
 
@@ -807,6 +945,7 @@ export interface CarrierStats {
 
 export async function getCarrierStats(carrierId: string): Promise<CarrierStats> {
   try {
+    await requireCarrierAccess(carrierId);
     const [totalRes] = await db.select({ count: count() }).from(schema.loads).where(eq(schema.loads.carrierId, carrierId));
     const [completedRes] = await db.select({ count: count() }).from(schema.loads).where(and(eq(schema.loads.carrierId, carrierId), inArray(schema.loads.status, ['delivered', 'pod_received', 'invoiced', 'paid'])));
     const [activeRes] = await db.select({ count: count() }).from(schema.loads).where(and(eq(schema.loads.carrierId, carrierId), inArray(schema.loads.status, ['booked', 'dispatched', 'in_transit'])));
@@ -855,6 +994,7 @@ export interface DashboardStats {
 
 export async function getDashboardStats(): Promise<DashboardStats> {
   try {
+    await requireAdminUser();
     const now = new Date();
     const dayOfWeek = now.getDay();
     
@@ -916,6 +1056,7 @@ function getTodayActivityInMemory(loads: SonexLoad[]): { pickups: SonexLoad[]; d
 }
 
 export async function getTodayActivity(): Promise<{ pickups: SonexLoad[]; deliveries: SonexLoad[] }> {
+  await requireAdminUser();
   const loads = await getLoads();
   return getTodayActivityInMemory(loads);
 }
@@ -997,6 +1138,7 @@ function buildWeeklyDataServer(loads: SonexLoad[]) {
 
 export async function getDashboardCombinedData() {
   try {
+    await requireAdminUser();
     const [loads, carriers] = await Promise.all([
       getLoads(),
       getCarriers(),
@@ -1043,6 +1185,7 @@ export async function getDashboardCombinedData() {
 // â”€â”€â”€ CSV Export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function exportLoadsCSV(loads: SonexLoad[], carriers: SonexCarrier[]): Promise<string> {
+  await requireAdminUser();
   const carrierMap = new Map(carriers.map(c => [c.id, `${c.firstName} ${c.lastName}`]));
   const headers = [
     'Load #', 'Date', 'Carrier', 'Broker', 'Pickup State', 'Delivery State',
@@ -1071,337 +1214,3 @@ export async function exportLoadsCSV(loads: SonexLoad[], carriers: SonexCarrier[
 }
 
 // â”€â”€â”€ Database Reset Trigger â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-export async function resetStore(): Promise<void> {
-  // Clear tables and re-run seeder logic programmatically
-  try {
-    console.log('Resetting database store...');
-    await db.delete(schema.loadCheckins);
-    await db.delete(schema.cargoPhotos);
-    await db.delete(schema.settlements);
-    await db.delete(schema.loads);
-    await db.delete(schema.carrierDrivers);
-    await db.delete(schema.carrierEquipment);
-    await db.delete(schema.users);
-    await db.delete(schema.carriers);
-
-    const hasher = new (require('lucia').Scrypt || require('crypto'))(); 
-    // Wait, let's just trigger our seed script using child process or re-seed natively in server side code!
-    // Since we have the seed values, we can copy the seeder inserts here to run natively on the server!
-    const { hash } = require('@node-rs/argon2');
-    const adminPasswordHash = await hash('sonex2026');
-    const carrierPasswordHash = await hash('carrier2026');
-
-    // Insert Settings
-    await db.insert(schema.settings).values({
-      id: 1,
-      companyName: 'Sonex Logistics LLC',
-      companyAddress: '525 Randall Ave Ste 100',
-      companyCity: 'Cheyenne',
-      companyState: 'WY',
-      companyZip: '82001',
-      companyEmail: 'dispatch@sonexlogistics.com',
-      companyPhone: '(346) 421-2681',
-      defaultDispatchFeePercent: 10,
-      adminUsers: JSON.stringify([
-        { id: 'a0000000-0000-0000-0000-000000000001', name: 'Sonex Dispatch', email: 'dispatch@sonexlogistics.com' }
-      ]),
-    }).onConflictDoUpdate({
-      target: schema.settings.id,
-      set: {
-        companyName: 'Sonex Logistics LLC',
-        companyAddress: '525 Randall Ave Ste 100',
-        companyCity: 'Cheyenne',
-        companyState: 'WY',
-        companyZip: '82001',
-        companyEmail: 'dispatch@sonexlogistics.com',
-        companyPhone: '(346) 421-2681',
-        defaultDispatchFeePercent: 10,
-      }
-    });
-
-    const carrier1Id = 'c0000000-0000-0000-0000-000000000001';
-    const carrier2Id = 'c0000000-0000-0000-0000-000000000002';
-
-    await db.insert(schema.carriers).values([
-      {
-        id: carrier1Id,
-        firstName: 'John',
-        lastName: 'Doe',
-        email: 'john.doe@carrier.com',
-        phone: '(512) 555-0101',
-        address: '123 Main St',
-        city: 'Austin',
-        state: 'TX',
-        zip: '78701',
-        hasOwnAuthority: true,
-        mcNumber: 'MC123456',
-        dotNumber: 'DOT3456789',
-        isLeasedMC: false,
-        insuranceType: 'vin_scheduled',
-        insuranceCompany: 'Progressive Commercial',
-        insurancePolicyNumber: 'POL-12345678',
-        dispatchFeePercent: 8,
-        status: 'active',
-        notes: 'Highly reliable dry van owner operator.',
-        portalEmail: 'john@sonexcarrier.com',
-      },
-      {
-        id: carrier2Id,
-        firstName: 'Sarah',
-        lastName: 'Smith',
-        email: 'sarah.smith@logistics.com',
-        phone: '(415) 555-0202',
-        address: '456 Oak Ave',
-        city: 'San Francisco',
-        state: 'CA',
-        zip: '94102',
-        hasOwnAuthority: false,
-        isLeasedMC: true,
-        mcHolderName: 'Unified Logistics LLC',
-        mcHolderMC: 'MC987654',
-        insuranceType: 'certificate_holder',
-        insuranceCompany: 'Great West Catalog',
-        insurancePolicyNumber: 'GWC-98765432',
-        dispatchFeePercent: 10,
-        status: 'active',
-        notes: 'Temperature controlled load specialist.',
-        portalEmail: 'sarah@sonexcarrier.com',
-      }
-    ]);
-
-    const user1Id = 'a1111111-1111-1111-1111-111111111111';
-    const user2Id = 'a1111111-1111-1111-1111-111111111112';
-    const user3Id = 'a1111111-1111-1111-1111-111111111113';
-
-    await db.insert(schema.users).values([
-      {
-        id: user1Id,
-        email: 'dispatch@sonexlogistics.com',
-        passwordHash: adminPasswordHash,
-        role: 'admin',
-        displayName: 'Sonex Dispatch',
-        avatar: 'SD',
-      },
-      {
-        id: user2Id,
-        email: 'john@sonexcarrier.com',
-        passwordHash: carrierPasswordHash,
-        role: 'carrier',
-        displayName: 'John Doe',
-        carrierId: carrier1Id,
-        avatar: 'JD',
-      },
-      {
-        id: user3Id,
-        email: 'sarah@sonexcarrier.com',
-        passwordHash: carrierPasswordHash,
-        role: 'carrier',
-        displayName: 'Sarah Smith',
-        carrierId: carrier2Id,
-        avatar: 'SS',
-      }
-    ]);
-
-    const driver1Id = 'd0000000-0000-0000-0000-000000000001';
-    const driver2Id = 'd0000000-0000-0000-0000-000000000002';
-
-    await db.insert(schema.carrierDrivers).values([
-      {
-        id: driver1Id,
-        carrierId: carrier1Id,
-        userId: user2Id,
-        firstName: 'John',
-        lastName: 'Doe',
-        contactEmail: 'john@sonexcarrier.com',
-        phone: '(512) 555-0101',
-        licenseNumber: 'TX-DL-99281',
-        licenseState: 'TX',
-        licenseClass: 'A',
-        status: 'active',
-      },
-      {
-        id: driver2Id,
-        carrierId: carrier2Id,
-        userId: user3Id,
-        firstName: 'Sarah',
-        lastName: 'Smith',
-        contactEmail: 'sarah@sonexcarrier.com',
-        phone: '(415) 555-0202',
-        licenseNumber: 'CA-DL-11028',
-        licenseState: 'CA',
-        licenseClass: 'A',
-        status: 'active',
-      }
-    ]);
-
-    const truck1Id = 'e0000000-0000-0000-0000-000000000001';
-    const trailer1Id = 'e0000000-0000-0000-0000-000000000002';
-    const truck2Id = 'e0000000-0000-0000-0000-000000000003';
-    const trailer2Id = 'e0000000-0000-0000-0000-000000000004';
-
-    await db.insert(schema.carrierEquipment).values([
-      {
-        id: truck1Id,
-        carrierId: carrier1Id,
-        type: 'truck',
-        equipmentType: 'dry_van',
-        year: 2022,
-        make: 'Freightliner',
-        model: 'Cascadia',
-        vin: '1FVACWDB8NHXXXXXX',
-        plate: 'TX12345',
-        state: 'TX',
-        weightCapacity: 45000,
-      },
-      {
-        id: trailer1Id,
-        carrierId: carrier1Id,
-        type: 'trailer',
-        equipmentType: 'dry_van',
-        year: 2021,
-        make: 'Great Dane',
-        model: 'Champion',
-        vin: '53TRVINXXXXXXXXXX',
-        plate: 'TR98765',
-        state: 'TX',
-        length: 53,
-      },
-      {
-        id: truck2Id,
-        carrierId: carrier2Id,
-        type: 'truck',
-        equipmentType: 'reefer',
-        year: 2023,
-        make: 'Peterbilt',
-        model: '579',
-        vin: '1XP5D49X5NDXXXXXX',
-        plate: 'CA67890',
-        state: 'CA',
-        weightCapacity: 44000,
-      },
-      {
-        id: trailer2Id,
-        carrierId: carrier2Id,
-        type: 'trailer',
-        equipmentType: 'reefer',
-        year: 2022,
-        make: 'Utility',
-        model: '3000R',
-        vin: '53RFVINXXXXXXXXXX',
-        plate: 'RF45678',
-        state: 'CA',
-        length: 53,
-      }
-    ]);
-
-    const load1Id = '10000000-0000-0000-0000-000000000001';
-    const load2Id = '10000000-0000-0000-0000-000000000002';
-
-    await db.insert(schema.loads).values([
-      {
-        id: load1Id,
-        loadNumber: 'SNX-2026-001',
-        carrierId: carrier1Id,
-        driverId: driver1Id,
-        equipmentId: truck1Id,
-        brokerName: 'C.H. Robinson',
-        brokerContact: 'Mark Davis',
-        brokerPhone: '(800) 323-7587',
-        brokerEmail: 'mark.davis@chrobinson.com',
-        brokerMC: 'MC-1234',
-        pickupFacility: 'PepsiCo Warehouse',
-        pickupAddress: '1200 Beverage Dr',
-        pickupCity: 'Dallas',
-        pickupState: 'TX',
-        pickupZip: '75201',
-        pickupDate: '2026-06-29',
-        pickupTime: '08:00',
-        pickupApptNumber: 'APPT-1002',
-        deliveryFacility: 'Walmart DC 6012',
-        deliveryAddress: '500 Distribution Rd',
-        deliveryCity: 'Houston',
-        deliveryState: 'TX',
-        deliveryZip: '77001',
-        deliveryDate: '2026-06-29',
-        deliveryTime: '14:00',
-        deliveryApptNumber: 'APPT-5542',
-        commodity: 'Beverages (Soda)',
-        weight: 42000,
-        miles: 240,
-        rate: 950.00,
-        dispatchFeePercent: 8.00,
-        dispatchFeeAmount: 76.00,
-        carrierNet: 874.00,
-        ratePerMile: 3.96,
-        status: 'booked',
-        notes: 'Must maintain proper check-in times.',
-        freeTimeMinutes: 120,
-      },
-      {
-        id: load2Id,
-        loadNumber: 'SNX-2026-002',
-        carrierId: carrier2Id,
-        driverId: driver2Id,
-        equipmentId: truck2Id,
-        brokerName: 'TQL',
-        brokerContact: 'Jessica Miller',
-        brokerPhone: '(800) 580-3101',
-        brokerEmail: 'jmiller@tql.com',
-        brokerMC: 'MC-5678',
-        pickupFacility: 'Tyson Foods',
-        pickupAddress: '400 Poultry Way',
-        pickupCity: 'Springdale',
-        pickupState: 'AR',
-        pickupZip: '72764',
-        pickupDate: '2026-06-29',
-        pickupTime: '06:00',
-        pickupApptNumber: 'PU-99182',
-        deliveryFacility: 'Kroger Distribution',
-        deliveryAddress: '101 Grocery Ln',
-        deliveryCity: 'Cincinnati',
-        deliveryState: 'OH',
-        deliveryZip: '45201',
-        deliveryDate: '2026-06-30',
-        deliveryTime: '10:00',
-        deliveryApptNumber: 'DEL-33821',
-        commodity: 'Frozen Poultry',
-        weight: 40000,
-        miles: 650,
-        rate: 2400.00,
-        dispatchFeePercent: 10.00,
-        dispatchFeeAmount: 240.00,
-        carrierNet: 2160.00,
-        ratePerMile: 3.69,
-        status: 'in_transit',
-        notes: 'Maintain temperature at -10F. Pre-cool trailer.',
-        freeTimeMinutes: 120,
-      }
-    ]);
-
-    await db.insert(schema.loadCheckins).values([
-      {
-        id: 'c1111111-1111-1111-1111-111111111111',
-        loadId: load2Id,
-        event: 'arrived_pickup',
-        timestamp: '2026-06-29T05:45:00.000Z',
-        notes: 'Driver arrived at Tyson Foods pickup facility early.',
-        loggedBy: 'carrier',
-      },
-      {
-        id: 'c1111111-1111-1111-1111-111111111112',
-        loadId: load2Id,
-        event: 'loaded_departing',
-        timestamp: '2026-06-29T07:15:00.000Z',
-        notes: 'Loaded, trailer sealed #481992. Departing Tyson.',
-        loggedBy: 'carrier',
-      }
-    ]);
-
-    console.log('Database reset complete.');
-  } catch (err) {
-    console.error('Error resetting database store:', err);
-    throw err;
-  }
-}
-

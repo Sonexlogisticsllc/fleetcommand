@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Package, Plus, Search, X, Check, ChevronRight, Filter,
   Sparkles, UploadCloud, Loader2, User, Clock, ArrowRight,
@@ -18,13 +18,13 @@ import { uploadFile } from '@/lib/storageUtils';
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const STATUS_BADGE: Record<LoadStatus, string> = {
-  booked: 'bg-slate-800 text-slate-300 border-slate-700',
-  dispatched: 'bg-blue-950 text-blue-300 border-blue-800',
-  in_transit: 'bg-amber-950 text-amber-300 border-amber-800',
-  delivered: 'bg-emerald-950 text-emerald-300 border-emerald-800',
-  pod_received: 'bg-emerald-950 text-emerald-300 border-emerald-800',
-  invoiced: 'bg-purple-950 text-purple-300 border-purple-800',
-  paid: 'bg-purple-950 text-purple-300 border-purple-800',
+  booked: 'bg-slate-100 text-slate-700 border-slate-200',
+  dispatched: 'bg-blue-50 text-blue-800 border-blue-200',
+  in_transit: 'bg-amber-50 text-amber-800 border-amber-200',
+  delivered: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+  pod_received: 'bg-teal-50 text-teal-800 border-teal-200',
+  invoiced: 'bg-violet-50 text-violet-800 border-violet-200',
+  paid: 'bg-emerald-50 text-emerald-800 border-emerald-200',
 };
 
 function fmt$(n: number) {
@@ -76,10 +76,10 @@ interface NewLoadModalProps {
 
 function NewLoadModal({ carriers, onClose, onSaved }: NewLoadModalProps) {
   const rateConRef = useRef<HTMLInputElement>(null);
-  const [creationMode, setCreationMode] = useState<'premium' | 'manual' | 'truckgpt' | 'other'>('manual');
+  const [creationMode, setCreationMode] = useState<'upload' | 'manual'>('manual');
   const [rateConFile, setRateConFile] = useState<File | null>(null);
   const [form, setForm] = useState({
-    carrierId: '', // Default to unassigned
+    carrierId: '',
     // Broker
     brokerName: '', brokerContact: '', brokerPhone: '', brokerEmail: '', brokerMC: '',
     // Pickup
@@ -104,8 +104,8 @@ function NewLoadModal({ carriers, onClose, onSaved }: NewLoadModalProps) {
   const set = (k: string, v: unknown) => setForm(f => ({ ...f, [k]: v }));
 
   const handleSave = async () => {
-    if (!form.pickupDate || !form.deliveryDate || !form.rate) {
-      toast.error('Please fill in required fields: dates and rate.');
+    if (!form.carrierId || !form.pickupDate || !form.deliveryDate || !form.rate) {
+      toast.error('Select a carrier and fill in the required dates and rate.');
       return;
     }
     const created = await addLoad({
@@ -154,13 +154,11 @@ function NewLoadModal({ carriers, onClose, onSaved }: NewLoadModalProps) {
           </button>
         </div>
 
-        <div className="grid grid-cols-4 gap-1 border-b border-white/[0.06] px-6 py-3">
+        <div className="grid grid-cols-2 gap-1 border-b border-white/[0.06] px-6 py-3">
           {([
-            ['premium', 'TruckGPT Premium'],
+            ['upload', 'Upload rate confirmation'],
             ['manual', 'Manual entry'],
-            ['truckgpt', 'TruckGPT'],
-            ['other', 'Other methods'],
-          ] as const).map(([id, label]) => <button key={id} onClick={() => { setCreationMode(id); if (id === 'premium' || id === 'truckgpt') rateConRef.current?.click(); }} className={`px-2 py-2 text-[11px] font-semibold ${creationMode === id ? 'bg-violet-700 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>{label}</button>)}
+          ] as const).map(([id, label]) => <button key={id} onClick={() => { setCreationMode(id); if (id === 'upload') rateConRef.current?.click(); }} className={`px-2 py-2 text-[11px] font-semibold ${creationMode === id ? 'bg-violet-700 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>{label}</button>)}
           <input ref={rateConRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={event => { const file = event.target.files?.[0] ?? null; setRateConFile(file); if (file) toast.success(`${file.name} attached for review`); event.target.value = ''; }} />
         </div>
 
@@ -176,7 +174,7 @@ function NewLoadModal({ carriers, onClose, onSaved }: NewLoadModalProps) {
               onChange={e => set('carrierId', e.target.value)}
               className="input-primary text-sm py-2"
             >
-              <option value="">-- Unassigned (Add to Queue) --</option>
+              <option value="">Select carrier</option>
               {carriers.filter(c => c.status === 'active').map(c => (
                 <option key={c.id} value={c.id}>
                   {c.firstName} {c.lastName} — {EQUIPMENT_TYPE_LABELS[c.equipmentType]} ({c.dispatchFeePercent}% fee)
@@ -229,7 +227,7 @@ function NewLoadModal({ carriers, onClose, onSaved }: NewLoadModalProps) {
             {input('Rate ($)', 'rate', 'number', '0', true)}
             <div>
               <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Carrier</label>
-              <p className="text-slate-400 text-sm py-2">{selectedCarrier ? `${selectedCarrier.firstName} ${selectedCarrier.lastName}` : 'Unassigned'}</p>
+              <p className="text-slate-400 text-sm py-2">{selectedCarrier ? `${selectedCarrier.firstName} ${selectedCarrier.lastName}` : 'Select a carrier'}</p>
             </div>
             {/* Live calculations */}
             <div className="col-span-2 p-4 rounded-xl bg-amber-500/[0.06] border border-amber-500/15 grid grid-cols-3 gap-4">
@@ -281,6 +279,7 @@ function NewLoadModal({ carriers, onClose, onSaved }: NewLoadModalProps) {
 
 export default function LoadsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loads, setLoads] = useState<SonexLoad[]>([]);
   const [carriers, setCarriers] = useState<SonexCarrier[]>([]);
   
@@ -299,6 +298,7 @@ export default function LoadsPage() {
   const [scanStep, setScanStep] = useState('');
   const [parseDocumentType, setParseDocumentType] = useState<'rate_confirmation' | 'bol'>('rate_confirmation');
   const [parsedPreview, setParsedPreview] = useState<ParsedPreview | null>(null);
+  const [parsedCarrierId, setParsedCarrierId] = useState('');
   const aiFileRef = useRef<HTMLInputElement>(null);
 
   // Dynamic quick-assign load selections for carriers
@@ -408,6 +408,11 @@ export default function LoadsPage() {
   const handleAiUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > 4 * 1024 * 1024) {
+      toast.error('Parser files must be 4 MB or smaller. The original can still be uploaded in load paperwork.');
+      e.target.value = '';
+      return;
+    }
 
     setScanning(true);
     setScanStep('Scanning Rate Confirmation PDF...');
@@ -441,11 +446,15 @@ export default function LoadsPage() {
 
   const confirmParsedLoad = async () => {
     if (!parsedPreview) return;
+    if (!parsedCarrierId) {
+      toast.error('Choose the carrier that will receive this load.');
+      return;
+    }
     try {
       const { confidenceScore, documentType, loadNumber, ...loadData } = parsedPreview;
       await addLoad({
         ...loadData,
-        carrierId: '',
+        carrierId: parsedCarrierId,
         status: 'booked',
         dispatchFeePercent: 10,
         ratConUrl: undefined,
@@ -454,7 +463,8 @@ export default function LoadsPage() {
         notes: (loadData.notes || '') + ' Parsed from ' + documentType + (loadNumber ? ' ' + loadNumber : '') + ' with confidence ' + confidenceScore,
       } as Parameters<typeof addLoad>[0]);
       setParsedPreview(null);
-      toast.success('Reviewed document saved to the unassigned queue.');
+      setParsedCarrierId('');
+      toast.success('Reviewed document saved and assigned to the selected carrier.');
       reloadData();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not save parsed load.');
@@ -473,27 +483,36 @@ export default function LoadsPage() {
     toast.success('Load list exported');
   };
 
+  useEffect(() => {
+    if (searchParams.get('new') === '1') setShowNew(true);
+  }, [searchParams]);
+
+  const closeNewLoad = () => {
+    setShowNew(false);
+    if (searchParams.get('new') === '1') router.replace('/sonex/loads');
+  };
+
   return (
-    <div className="p-6 animate-fade-in text-white space-y-6 max-w-7xl mx-auto">
+    <div className="mx-auto max-w-none space-y-3 bg-[#f2f5f9] p-4 text-slate-900 sm:p-5">
       
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-white/5 pb-4">
+      <div className="flex items-center justify-between border-b border-slate-200 pb-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black uppercase tracking-widest bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/20">DataTruck TMS</span>
+            <span className="text-[10px] font-black uppercase tracking-widest bg-blue-500/10 text-blue-600 px-2 py-0.5 rounded border border-blue-200">SONEX DISPATCH</span>
             <h1 className="text-2xl font-black tracking-tight">Dispatch Control Center</h1>
           </div>
-          <p className="text-slate-400 text-xs">Automate load booking, fleet dispatching, and settlements</p>
+          <p className="text-slate-500 text-xs">Plan, assign, track, and settle every load from one workspace.</p>
         </div>
          <div className="flex items-center gap-2">
-           <select value={parseDocumentType} onChange={event => setParseDocumentType(event.target.value as 'rate_confirmation' | 'bol')} className="border border-white/10 bg-[#0E1524] px-2 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-300 outline-none focus:border-blue-500">
+           <select value={parseDocumentType} onChange={event => setParseDocumentType(event.target.value as 'rate_confirmation' | 'bol')} className="border border-slate-200 bg-white px-2 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-700 outline-none focus:border-blue-500">
              <option value="rate_confirmation">Rate confirmation</option>
              <option value="bol">BOL</option>
            </select>
            <button
             onClick={() => aiFileRef.current?.click()}
             disabled={scanning}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-amber-500/20 bg-amber-500/10 text-amber-400 font-bold text-xs hover:bg-amber-500/20 transition-all uppercase shrink-0"
+            className="flex items-center gap-2 border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-bold uppercase text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-50"
           >
             {scanning ? (
               <>
@@ -509,7 +528,7 @@ export default function LoadsPage() {
           </button>
           <button
             onClick={() => setShowNew(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 text-black font-black text-xs hover:bg-amber-400 transition-all uppercase shrink-0"
+            className="flex items-center gap-2 bg-blue-600 px-4 py-2.5 text-xs font-bold uppercase text-white transition-colors hover:bg-blue-700"
           >
             <Plus size={14} /> New Manual Order
           </button>
@@ -522,6 +541,7 @@ export default function LoadsPage() {
           <aside className="relative h-full w-full max-w-[650px] overflow-y-auto border-l border-slate-800 bg-slate-900 p-5 text-slate-100 shadow-2xl">
             <div className="flex items-start justify-between border-b border-slate-800 pb-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.08em] text-blue-400">Bounded extraction preview</p><h2 className="mt-1 text-lg font-semibold">Review before saving</h2><p className="mt-1 text-xs text-slate-400">No load has been written yet. Edit any field, then confirm.</p></div><button onClick={() => setParsedPreview(null)} className="p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white" title="Close preview"><X size={17} /></button></div>
             <div className="mt-4 grid grid-cols-2 gap-2"><div className="border border-slate-800 bg-slate-950 p-3"><p className="text-[10px] uppercase tracking-wider text-slate-500">Overall confidence</p><p className="mt-1 font-mono text-xl font-bold text-emerald-400">{Math.round(parsedPreview.confidenceScore * 100)}%</p></div><div className="border border-slate-800 bg-slate-950 p-3"><p className="text-[10px] uppercase tracking-wider text-slate-500">Document type</p><p className="mt-2 text-xs font-semibold uppercase text-slate-200">{parsedPreview.documentType.replace('_', ' ')}</p></div></div>
+            <label className="mt-5 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Assigned carrier<select value={parsedCarrierId} onChange={event => setParsedCarrierId(event.target.value)} className="mt-1 w-full border border-slate-700 bg-slate-950 px-2 py-2 text-xs text-white outline-none focus:border-blue-500"><option value="">Choose a carrier</option>{activeCarriers.map(carrier => <option key={carrier.id} value={carrier.id}>{carrier.firstName} {carrier.lastName}</option>)}</select></label>
             <div className="mt-5 grid gap-3 sm:grid-cols-2"><label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Load number<input value={parsedPreview.loadNumber} onChange={event => updateParsedField('loadNumber', event.target.value)} className="mt-1 w-full border border-slate-700 bg-slate-950 px-2 py-2 text-xs text-white outline-none focus:border-blue-500" /></label><label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Broker<input value={parsedPreview.brokerName} onChange={event => updateParsedField('brokerName', event.target.value)} className="mt-1 w-full border border-slate-700 bg-slate-950 px-2 py-2 text-xs text-white outline-none focus:border-blue-500" /></label><label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Rate<input type="number" value={parsedPreview.rate} onChange={event => updateParsedField('rate', Number(event.target.value))} className="mt-1 w-full border border-slate-700 bg-slate-950 px-2 py-2 text-xs text-white outline-none focus:border-blue-500" /></label><label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Commodity<input value={parsedPreview.commodity} onChange={event => updateParsedField('commodity', event.target.value)} className="mt-1 w-full border border-slate-700 bg-slate-950 px-2 py-2 text-xs text-white outline-none focus:border-blue-500" /></label></div>
             <div className="mt-5 border border-slate-800 bg-slate-950"><div className="border-b border-slate-800 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Pickup stop</div><div className="grid gap-3 p-3 sm:grid-cols-2"><label className="text-[10px] text-slate-400">Facility<input value={parsedPreview.pickupFacility} onChange={event => updateParsedField('pickupFacility', event.target.value)} className="mt-1 w-full border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-white outline-none focus:border-blue-500" /></label><label className="text-[10px] text-slate-400">City / state<input value={parsedPreview.pickupCity + ', ' + parsedPreview.pickupState} onChange={event => { const [city, state] = event.target.value.split(','); updateParsedField('pickupCity', city.trim()); updateParsedField('pickupState', (state || '').trim()); }} className="mt-1 w-full border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-white outline-none focus:border-blue-500" /></label><label className="text-[10px] text-slate-400">Date<input type="date" value={parsedPreview.pickupDate} onChange={event => updateParsedField('pickupDate', event.target.value)} className="mt-1 w-full border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-white outline-none focus:border-blue-500" /></label><label className="text-[10px] text-slate-400">Time<input type="time" value={parsedPreview.pickupTime} onChange={event => updateParsedField('pickupTime', event.target.value)} className="mt-1 w-full border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-white outline-none focus:border-blue-500" /></label></div></div>
             <div className="mt-3 border border-slate-800 bg-slate-950"><div className="border-b border-slate-800 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Delivery stop</div><div className="grid gap-3 p-3 sm:grid-cols-2"><label className="text-[10px] text-slate-400">Facility<input value={parsedPreview.deliveryFacility} onChange={event => updateParsedField('deliveryFacility', event.target.value)} className="mt-1 w-full border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-white outline-none focus:border-blue-500" /></label><label className="text-[10px] text-slate-400">City / state<input value={parsedPreview.deliveryCity + ', ' + parsedPreview.deliveryState} onChange={event => { const [city, state] = event.target.value.split(','); updateParsedField('deliveryCity', city.trim()); updateParsedField('deliveryState', (state || '').trim()); }} className="mt-1 w-full border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-white outline-none focus:border-blue-500" /></label><label className="text-[10px] text-slate-400">Date<input type="date" value={parsedPreview.deliveryDate} onChange={event => updateParsedField('deliveryDate', event.target.value)} className="mt-1 w-full border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-white outline-none focus:border-blue-500" /></label><label className="text-[10px] text-slate-400">Time<input type="time" value={parsedPreview.deliveryTime} onChange={event => updateParsedField('deliveryTime', event.target.value)} className="mt-1 w-full border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-white outline-none focus:border-blue-500" /></label></div></div>
@@ -557,10 +577,9 @@ export default function LoadsPage() {
       {showColumns && <div className="flex flex-wrap items-center gap-4 border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600"><span className="font-semibold">Visible columns</span>{(Object.keys(visibleColumns) as Array<keyof typeof visibleColumns>).map(column => <label key={column} className="inline-flex items-center gap-1.5 capitalize"><input type="checkbox" checked={visibleColumns[column]} onChange={event => setVisibleColumns(current => ({ ...current, [column]: event.target.checked }))} />{column}</label>)}</div>}
 
       {/* Main Boards Tabs Navigation */}
-      <div className="flex gap-2 border-b border-white/5 pb-px">
+      <div className="flex gap-2 border-b border-slate-200 pb-px">
         {[
           { id: 'dispatch', label: 'Active Dispatch Board', count: activeCarriers.length, sub: 'Fleet control' },
-          { id: 'unassigned', label: 'Unassigned Order Queue', count: unassignedLoads.length, sub: 'Unbooked loads' },
           { id: 'log', label: 'Master Load Log', count: loads.length, sub: 'All logs' },
         ].map(tab => {
           const active = activeBoardTab === tab.id;
@@ -569,12 +588,12 @@ export default function LoadsPage() {
               key={tab.id}
               onClick={() => setActiveBoardTab(tab.id as any)}
               className={`flex items-center gap-2 px-4 py-3 border-b-2 font-bold text-xs uppercase tracking-wider transition-all ${
-                active ? 'border-amber-500 text-amber-400' : 'border-transparent text-slate-500 hover:text-slate-300'
+                active ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700'
               }`}
             >
               {tab.label}
               <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                active ? 'bg-amber-500/20 text-amber-300 border border-amber-500/20' : 'bg-white/5 text-slate-500'
+                active ? 'border border-blue-200 bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-500'
               }`}>{tab.count}</span>
             </button>
           );
@@ -597,7 +616,7 @@ export default function LoadsPage() {
                   <td className="px-2 py-1 font-mono text-slate-400">{activeLoad ? fmtDate(activeLoad.pickupDate) : '—'}</td>
                   <td className="px-2 py-1 font-mono text-slate-400">{activeLoad ? fmtDate(activeLoad.deliveryDate) : '—'}</td>
                   <td className="px-2 py-1 text-right font-mono text-emerald-400">{activeLoad ? fmt$(activeLoad.rate) : '—'}</td>
-                  <td className="px-2 py-1"><span className={`inline-flex border px-1.5 py-0.5 text-[10px] font-bold ${activeLoad ? STATUS_BADGE[activeLoad.status] : 'border-slate-700 bg-slate-800 text-slate-300'}`}>{activeLoad ? LOAD_STATUS_LABELS[activeLoad.status] : 'UNASSIGNED'}</span></td>
+                  <td className="px-2 py-1"><span className={`inline-flex border px-1.5 py-0.5 text-[10px] font-bold ${activeLoad ? STATUS_BADGE[activeLoad.status] : 'border-slate-200 bg-slate-100 text-slate-700'}`}>{activeLoad ? LOAD_STATUS_LABELS[activeLoad.status] : 'UNASSIGNED'}</span></td>
                   <td className="px-2 py-1"><ChevronRight size={14} className="text-slate-500" /></td>
                 </tr>;
               })}
@@ -617,7 +636,7 @@ export default function LoadsPage() {
                 {/* Carrier info */}
                 <div className="space-y-1">
                   <div className="flex justify-between items-start">
-                    <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider">Motive Telematics</span>
+                    <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider">Sonex Operations</span>
                     <span className={`text-[9px] font-bold px-2 py-0.5 rounded border ${
                       activeLoad ? 'text-amber-400 bg-amber-500/10 border-amber-500/25' : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25'
                     }`}>
@@ -783,7 +802,7 @@ export default function LoadsPage() {
 
           {/* AI Drag-and-drop OCR Parser Sidebar */}
           <div className="space-y-4">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">OCR Load Creator (TruckGPT)</h3>
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Rate Confirmation Extraction</h3>
             <div 
               onClick={() => aiFileRef.current?.click()}
               className="border border-dashed border-white/10 rounded-2xl p-8 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-white/[0.02] hover:border-amber-500/30 transition-all space-y-4"
@@ -815,7 +834,7 @@ export default function LoadsPage() {
               </div>
               <p className="text-slate-500 text-[10px] leading-relaxed">
                 When you drag and drop a Rate Confirmation document:
-                <br />1. DataTruck OCR parses route stops, pickup dates, broker contacts, commodity descriptions, and rate payouts.
+                <br />1. Sonex extraction reads route stops, pickup dates, broker contacts, commodity descriptions, and rate payouts.
                 <br />2. The load is created in under 15 seconds and appended to the <strong>Unassigned Queue</strong>.
                 <br />3. Assign it to any available carrier immediately using the dropdown selector.
               </p>
@@ -963,7 +982,7 @@ export default function LoadsPage() {
 
       {/* Modal */}
       {showNew && (
-        <NewLoadModal carriers={carriers} onClose={() => setShowNew(false)} onSaved={reloadData} />
+        <NewLoadModal carriers={carriers} onClose={closeNewLoad} onSaved={reloadData} />
       )}
     </div>
   );

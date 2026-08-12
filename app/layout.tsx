@@ -4,7 +4,7 @@ import { Toaster } from 'react-hot-toast';
 import { SonexAuthProvider } from '@/lib/sonexAuth';
 
 export const metadata: Metadata = {
-  title: 'FleetCommand TMS — Transportation Management System',
+  title: 'Sonex Dispatch — Transportation Management System',
   description: 'Commercial all-in-one automated TMS. Maximize net profit, minimize manual input, and dispatch remotely with AI-powered tools.',
 };
 

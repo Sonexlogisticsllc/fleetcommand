@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { PDFParse } from 'pdf-parse';
+import { lucia } from '@/lib/lucia';
 
-function extractPdfText(buffer: Buffer): string {
+const MAX_PARSER_BYTES = 4 * 1024 * 1024;
+
+function extractRawPdfStrings(buffer: Buffer): string {
   const content = buffer.toString('binary');
   
   // 1. Find all parenthesized text strings: (text)
@@ -34,218 +39,146 @@ function extractPdfText(buffer: Buffer): string {
   return (parenText + ' ' + hexText + ' ' + cleanAscii).replace(/\s+/g, ' ');
 }
 
+async function extractDocumentText(buffer: Buffer, contentType: string): Promise<string> {
+  if (contentType !== 'application/pdf') return '';
+
+  const parser = new PDFParse({ data: new Uint8Array(buffer) });
+  try {
+    const result = await parser.getText();
+    const text = result.text.trim();
+    return text || extractRawPdfStrings(buffer);
+  } catch {
+    return extractRawPdfStrings(buffer);
+  } finally {
+    await parser.destroy();
+  }
+}
+
+function capture(text: string, pattern: RegExp) {
+  return text.match(pattern)?.[1]?.trim() ?? '';
+}
+
+function parseAmount(value: string) {
+  const parsed = Number(value.replace(/[$,\s]/g, ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function normalizeDate(value: string) {
+  if (!value) return '';
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString().slice(0, 10);
+}
+
+function parseStop(text: string, stop: 'pickup' | 'delivery') {
+  const value = capture(text, new RegExp(`^${stop}(?: location| facility)?\\s*[:#-]?\\s*(.+)$`, 'im'));
+  const location = value.match(/^(.*?)\s+-\s+(.+?),\s*([A-Z]{2})\s+(\d{5}(?:-\d{4})?)$/i);
+  return {
+    facility: location?.[1]?.trim() ?? value,
+    address: '',
+    city: location?.[2]?.trim() ?? '',
+    state: location?.[3]?.toUpperCase() ?? '',
+    zip: location?.[4] ?? '',
+  };
+}
+
 export async function POST(req: Request) {
   try {
+    const sessionId = cookies().get(lucia.sessionCookieName)?.value;
+    if (!sessionId) return NextResponse.json({ success: false, error: 'Sign in to parse documents.' }, { status: 401 });
+    const { user } = await lucia.validateSession(sessionId);
+    if (!user || user.role !== 'admin') {
+      return NextResponse.json({ success: false, error: 'Dispatcher authorization required.' }, { status: 403 });
+    }
+
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
     if (!file) {
       return NextResponse.json({ success: false, error: 'No document uploaded' }, { status: 400 });
     }
+    if (file.size > MAX_PARSER_BYTES) {
+      return NextResponse.json({ success: false, error: 'Parser files must be 4 MB or smaller. Upload the original to load paperwork after review.' }, { status: 413 });
+    }
+    if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      return NextResponse.json({ success: false, error: 'Use a PDF, JPG, PNG, or WEBP document.' }, { status: 415 });
+    }
 
-    const fileName = file.name.toLowerCase();
     const documentType = formData.get('documentType') === 'bol' ? 'bol' : 'rate_confirmation';
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
     // Heuristically extract text from PDF or fallback to filename
-    const fileText = extractPdfText(buffer);
-    const textPool = (fileText + ' ' + fileName).toLowerCase();
+    const fileText = await extractDocumentText(buffer, file.type);
 
-    // 1. Broker MC Number
-    let brokerMC = '99824';
-    const mcMatch = textPool.match(/(?:mc\s*#?\s*|mc\s*number\s*|motor\s*carrier\s*)(\d{5,7})/i);
-    if (mcMatch) {
-      brokerMC = mcMatch[1];
-    }
+    const loadNumber = capture(fileText, /^(?:load|order|shipment)\s*(?:#|number|no\.?|id)?\s*[:#-]?\s*([a-z0-9-]{4,})/im).toUpperCase();
+    const brokerName = capture(fileText, /^broker(?: name)?\s*[:#-]?\s*(.+)$/im);
+    const brokerContact = capture(fileText, /^broker contact\s*[:#-]?\s*(.+)$/im);
+    const brokerPhone = capture(fileText, /^broker phone\s*[:#-]?\s*(.+)$/im);
+    const brokerEmail = capture(fileText, /^broker email\s*[:#-]?\s*(\S+@\S+)$/im);
+    const brokerMC = capture(fileText, /^(?:broker\s+)?mc(?: number| no\.?)?\s*[:#-]?\s*([a-z0-9-]+)$/im);
+    const pickup = parseStop(fileText, 'pickup');
+    const delivery = parseStop(fileText, 'delivery');
 
-    // 2. Broker Details Lookup
-    let brokerEvidence = false;
-    let brokerName = 'Total Quality Logistics (TQL)';
-    let brokerPhone = '(800) 555-0199';
-    let brokerContact = 'John Smith';
-    let brokerEmail = 'jsmith@tql.com';
+    const pickupDateValue = capture(fileText, /^pickup date\s*[:#-]?\s*([^\s]+)(?:\s+\d{1,2}:\d{2})?/im);
+    const deliveryDateValue = capture(fileText, /^delivery date\s*[:#-]?\s*([^\s]+)(?:\s+\d{1,2}:\d{2})?/im);
+    const pickupDate = normalizeDate(pickupDateValue);
+    const deliveryDate = normalizeDate(deliveryDateValue);
+    const pickupTime = capture(fileText, /^pickup date\s*[:#-]?\s*[^\s]+\s+(\d{1,2}:\d{2})/im);
+    const deliveryTime = capture(fileText, /^delivery date\s*[:#-]?\s*[^\s]+\s+(\d{1,2}:\d{2})/im);
+    const commodity = capture(fileText, /^commodity\s*[:#-]?\s*(.+)$/im);
+    const weightValue = capture(fileText, /^weight\s*[:#-]?\s*([\d,.]+)(?:\s*(?:lbs?|pounds?))?/im)
+      || capture(fileText, /^([\d,.]+)\s*(?:lbs?|pounds?)\b/im);
+    const milesValue = capture(fileText, /^(?:miles|distance)\s*[:#-]?\s*([\d,.]+)/im)
+      || capture(fileText, /^([\d,.]+)\s*(?:miles?|mi)\b/im);
+    const rateValue = capture(fileText, /^(?:line haul|carrier pay|total rate|rate|amount)\s*[:#-]?\s*(\$?[\d,.]+)/im);
+    const weight = parseAmount(weightValue);
+    const miles = parseAmount(milesValue);
+    const rate = parseAmount(rateValue);
 
-    if (textPool.includes('tql') || textPool.includes('total quality logistics')) {
-      brokerEvidence = true;
-      brokerName = 'Total Quality Logistics (TQL)';
-      brokerPhone = '(800) 555-0199';
-      brokerContact = 'TQL Load Team';
-      brokerEmail = 'carrierinvoicing@tql.com';
-      if (brokerMC === '99824') brokerMC = '654321';
-    } else if (textPool.includes('robinson') || textPool.includes('ch robinson') || textPool.includes('c.h.')) {
-      brokerEvidence = true;
-      brokerName = 'C.H. Robinson';
-      brokerPhone = '(800) 323-7587';
-      brokerContact = 'CHR Booking';
-      brokerEmail = 'loadboard@chrobinson.com';
-      brokerMC = '123456';
-    } else if (textPool.includes('xpo')) {
-      brokerEvidence = true;
-      brokerName = 'XPO Logistics';
-      brokerPhone = '(844) 742-5976';
-      brokerContact = 'XPO Dispatch';
-      brokerEmail = 'loadposting@xpo.com';
-      brokerMC = '789012';
-    } else if (textPool.includes('coyote')) {
-      brokerEvidence = true;
-      brokerName = 'Coyote Logistics';
-      brokerPhone = '(773) 849-5000';
-      brokerContact = 'Coyote Team';
-      brokerEmail = 'loads@coyote.com';
-      brokerMC = '456789';
-    } else if (textPool.includes('landstar')) {
-      brokerEvidence = true;
-      brokerName = 'Landstar System';
-      brokerPhone = '(800) 872-9400';
-      brokerContact = 'Landstar Agency';
-      brokerEmail = 'dispatch@landstar.com';
-      brokerMC = '198231';
-    } else {
-      // Dynamic parse of broker name
-      const brokerMatch = textPool.match(/broker\s*name\s*:\s*([^:\n]{3,40})/i) || textPool.match(/carrier\s*agreement\s*with\s*([^:\n]{3,40})/i);
-      if (brokerMatch) {
-        brokerEvidence = true;
-        brokerName = brokerMatch[1].trim().toUpperCase();
-        brokerContact = 'Agent';
-        brokerEmail = 'dispatch@' + brokerName.split(' ')[0].toLowerCase() + '.com';
-      }
-    }
-
-    // 3. Location Hub Parsing
-    const hubs = [
-      { facility: 'Chicago Distribution Center', address: '1800 N Western Ave', city: 'Chicago', state: 'IL', zip: '60647' },
-      { facility: 'Dallas Logi-Hub', address: '4500 Logistics Dr', city: 'Dallas', state: 'TX', zip: '75241' },
-      { facility: 'Houston Port Terminal', address: '101 East Loop S', city: 'Houston', state: 'TX', zip: '77029' },
-      { facility: 'Atlanta Freight Yard', address: '2200 Jonesboro Rd', city: 'Atlanta', state: 'GA', zip: '30315' },
-      { facility: 'Denver Cargo Depot', address: '5500 Pecos St', city: 'Denver', state: 'CO', zip: '80221' },
-      { facility: 'Miami Port Warehouse', address: '1200 Port Blvd', city: 'Miami', state: 'FL', zip: '33132' },
-      { facility: 'Los Angeles Rail Hub', address: '2001 E Alameda St', city: 'Los Angeles', state: 'CA', zip: '90058' },
-      { facility: 'Seattle Port Gateway', address: '4735 Marginal Way S', city: 'Seattle', state: 'WA', zip: '98134' },
-      { facility: 'Newark Freight Facility', address: '300 Port St', city: 'Newark', state: 'NJ', zip: '07114' },
-      { facility: 'Phoenix Depot', address: '3000 S 7th St', city: 'Phoenix', state: 'AZ', zip: '85040' }
+    const evidence = [
+      Boolean(loadNumber), Boolean(brokerName), Boolean(pickup.city), Boolean(delivery.city),
+      Boolean(pickupDate), Boolean(deliveryDate), rate > 0, weight > 0, miles > 0, Boolean(commodity),
     ];
-
-    let pickupHub = hubs[1]; // Dallas
-    let deliveryHub = hubs[0]; // Chicago
-
-    const foundHubs = hubs.filter(h => textPool.includes(h.city.toLowerCase()));
-    if (foundHubs.length >= 2) {
-      pickupHub = foundHubs[0];
-      deliveryHub = foundHubs[1];
-    } else if (foundHubs.length === 1) {
-      pickupHub = foundHubs[0];
-      deliveryHub = hubs.find(h => h.city !== pickupHub.city) || hubs[0];
-    }
-
-    // 4. Dates Heuristics
-    const dateMatches = textPool.match(/\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/g) || textPool.match(/\b\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}\b/g);
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const dayAfter = new Date();
-    dayAfter.setDate(dayAfter.getDate() + 2);
-
-    let pickupDateStr = tomorrow.toISOString().split('T')[0];
-    let deliveryDateStr = dayAfter.toISOString().split('T')[0];
-
-    if (dateMatches && dateMatches.length >= 2) {
-      const pDate = new Date(dateMatches[0]);
-      const dDate = new Date(dateMatches[1]);
-      if (!isNaN(pDate.getTime())) {
-        pickupDateStr = pDate.toISOString().split('T')[0];
-      }
-      if (!isNaN(dDate.getTime()) && dDate.getTime() >= pDate.getTime()) {
-        deliveryDateStr = dDate.toISOString().split('T')[0];
-      } else {
-        const fallbackDelivery = new Date(pDate);
-        fallbackDelivery.setDate(fallbackDelivery.getDate() + 1);
-        deliveryDateStr = fallbackDelivery.toISOString().split('T')[0];
-      }
-    }
-
-    // 5. Rate / Financials Extraction
-    let rateEvidence = false;
-    let rate = 1850;
-    const rateMatches = textPool.match(/(?:rate|total|price|amount|flat|charges|pay|payment)\s*(?::\s*|\$\s*|\s+)\$?([1-9]\d{2,3}(?:,\d{3})*(?:\.\d{2})?)/gi);
-    if (rateMatches) {
-      const parsedRates = rateMatches.map(m => {
-        const digits = m.match(/\d[\d,.]*/);
-        return digits ? parseFloat(digits[0].replace(/,/g, '')) : 0;
-      }).filter(n => n >= 300 && n <= 8000);
-      if (parsedRates.length > 0) {
-        rateEvidence = true;
-        rate = Math.max(...parsedRates);
-      }
-    }
-
-    // 6. Weight & Distance
-    let weightEvidence = false;
-    let weight = 28500;
-    const weightMatch = textPool.match(/(\d{2,3},?\d{3})\s*(?:lbs|lb|weight|gross)/i);
-    if (weightMatch) {
-      weightEvidence = true;
-      weight = parseInt(weightMatch[1].replace(/,/g, ''));
-    }
-
-    let milesEvidence = false;
-    let miles = 480;
-    const milesMatch = textPool.match(/(\d{2,4})\s*(?:miles|mi|distance)/i);
-    if (milesMatch) {
-      milesEvidence = true;
-      miles = parseInt(milesMatch[1]);
-    }
-
-    // 7. Commodity Info
-    let commodityEvidence = false;
-    let commodity = 'General Freight';
-    const commodities = ['steel coils', 'paper rolls', 'beverages', 'produce', 'lumber', 'auto parts', 'machinery', 'electronics'];
-    const matchedComm = commodities.find(c => textPool.includes(c));
-    if (matchedComm) {
-      commodityEvidence = true;
-      commodity = matchedComm.toUpperCase();
-    }
-
-    const evidenceCount = [brokerEvidence, Boolean(mcMatch), Boolean(dateMatches?.length), foundHubs.length > 0, rateEvidence, weightEvidence, milesEvidence, commodityEvidence].filter(Boolean).length;
-    const confidenceScore = Math.min(0.99, Math.max(0.35, Math.round((0.35 + evidenceCount * 0.08) * 100) / 100));
-    const loadNumberMatch = textPool.match(/(?:load|order|shipment)\s*(?:#|number|no\.?|id)?\s*[:\-]?\s*([a-z0-9-]{4,})/i);
+    const evidenceCount = evidence.filter(Boolean).length;
+    const confidenceScore = Math.min(0.98, Math.round((0.12 + evidenceCount * 0.085) * 100) / 100);
 
     return NextResponse.json({
       success: true,
       data: {
         documentType,
-        loadNumber: loadNumberMatch?.[1]?.toUpperCase() || '',
+        loadNumber,
         confidenceScore,
         fieldConfidence: {
-          brokerName: brokerEvidence ? confidenceScore : 0.35,
-          stops: foundHubs.length >= 2 && Boolean(dateMatches?.length) ? confidenceScore : 0.45,
-          rate: rateEvidence ? confidenceScore : 0.35,
-          commodity: commodityEvidence ? confidenceScore : 0.4,
+          brokerName: brokerName ? confidenceScore : 0.1,
+          stops: pickup.city && delivery.city && pickupDate && deliveryDate ? confidenceScore : 0.1,
+          rate: rate > 0 ? confidenceScore : 0.1,
+          commodity: commodity ? confidenceScore : 0.1,
         },
         brokerName,
         brokerContact,
         brokerPhone,
         brokerEmail,
         brokerMC,
-        pickupFacility: pickupHub.facility,
-        pickupAddress: pickupHub.address,
-        pickupCity: pickupHub.city,
-        pickupState: pickupHub.state,
-        pickupZip: pickupHub.zip,
-        pickupDate: pickupDateStr,
-        pickupTime: '08:00',
-        pickupApptNumber: 'APPT-' + Math.floor(Math.random() * 90000 + 10000),
-        deliveryFacility: deliveryHub.facility,
-        deliveryAddress: deliveryHub.address,
-        deliveryCity: deliveryHub.city,
-        deliveryState: deliveryHub.state,
-        deliveryZip: deliveryHub.zip,
-        deliveryDate: deliveryDateStr,
-        deliveryTime: '15:00',
-        deliveryApptNumber: 'APPT-' + Math.floor(Math.random() * 90000 + 10000),
+        pickupFacility: pickup.facility,
+        pickupAddress: pickup.address,
+        pickupCity: pickup.city,
+        pickupState: pickup.state,
+        pickupZip: pickup.zip,
+        pickupDate,
+        pickupTime,
+        pickupApptNumber: '',
+        deliveryFacility: delivery.facility,
+        deliveryAddress: delivery.address,
+        deliveryCity: delivery.city,
+        deliveryState: delivery.state,
+        deliveryZip: delivery.zip,
+        deliveryDate,
+        deliveryTime,
+        deliveryApptNumber: '',
         commodity,
         weight,
         miles,
         rate,
-        notes: `AI Heuristic Parsed load from document: ${file.name}`
+        notes: `Extracted from ${file.name}. Review all fields before saving.`
       }
     });
   } catch (err: unknown) {

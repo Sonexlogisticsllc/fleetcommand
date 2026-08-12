@@ -130,7 +130,7 @@ export default function CarrierProfilePage() {
     try {
       await updateCarrier(carrierId, { phone, email, address, city, state, zip });
       toast.success('Profile updated!', {
-        style: { background: '#0D1F3C', color: '#FCD34D', border: '1px solid rgba(245,158,11,0.3)' },
+        style: { background: '#ffffff', color: '#4c1d95', border: '1px solid #ddd6fe' },
       });
       load();
     } catch {
@@ -140,9 +140,9 @@ export default function CarrierProfilePage() {
     }
   }
 
-  function handleLogout() {
-    logout();
-    router.replace('/sonex/login');
+  async function handleLogout() {
+    await logout();
+    window.location.assign('/sonex/login');
   }
 
   if (!carrier) {
@@ -157,14 +157,14 @@ export default function CarrierProfilePage() {
   const fullName = `${carrier.firstName} ${carrier.lastName}`;
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
+    <div data-carrier-workspace className="max-w-2xl mx-auto px-4 py-6 space-y-5">
 
       {/* ── Profile header ─────────────────────────────────────────── */}
       <div className="flex items-center gap-4 px-4 py-5 rounded-2xl"
         style={{ background: 'rgba(13,31,60,0.55)', border: '1px solid rgba(255,255,255,0.06)' }}>
         {/* Avatar circle */}
         <div className="w-16 h-16 rounded-2xl flex items-center justify-center font-black text-xl text-[#050B18] flex-shrink-0"
-          style={{ background: 'linear-gradient(135deg, #F59E0B, #FCD34D)' }}>
+          style={{ background: 'linear-gradient(135deg, #7c3aed, #2563eb)', color: '#ffffff' }}>
           {initials}
         </div>
         <div className="flex-1 min-w-0">
@@ -200,8 +200,8 @@ export default function CarrierProfilePage() {
           disabled={saving}
           className="w-full flex items-center justify-center gap-2 rounded-xl py-3.5 font-bold text-sm transition-all active:scale-[0.98]"
           style={{
-            background: saving ? 'rgba(245,158,11,0.20)' : '#F59E0B',
-            color: saving ? '#64748B' : '#050B18',
+            background: saving ? '#ede9fe' : '#6d28d9',
+            color: saving ? '#64748B' : '#ffffff',
           }}>
           {saving ? (
             <>Saving…</>

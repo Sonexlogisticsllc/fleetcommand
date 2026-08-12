@@ -282,7 +282,7 @@ export default function LoadDetailPage() {
   };
 
   return (
-    <div data-datatruck-load-workspace className="min-h-screen bg-[#f2f5f9] p-6 animate-fade-in text-slate-900">
+    <div data-sonex-load-workspace className="min-h-screen bg-[#f2f5f9] p-6 animate-fade-in text-slate-900">
       <div className="mx-auto max-w-7xl space-y-6">
         
         {/* Navigation & Actions Header */}
@@ -323,11 +323,11 @@ export default function LoadDetailPage() {
           </div>
         </div>
 
-        {/* Motive Branding Header & Badge Block */}
+        {/* Sonex load header */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-b border-white/5 pb-5">
           <div className="space-y-1">
             <div className="flex items-center gap-3">
-              <span className="text-[10px] font-semibold uppercase tracking-widest bg-blue-50 text-blue-700 px-2 py-0.5 border border-blue-200">DATATRUCK LOAD</span>
+              <span className="text-[10px] font-semibold uppercase tracking-widest bg-blue-50 text-blue-700 px-2 py-0.5 border border-blue-200">SONEX LOAD</span>
               <h1 className="text-3xl font-black tracking-tight">{load.loadNumber}</h1>
               <LoadStatusBadge status={load.status} />
             </div>
@@ -338,10 +338,10 @@ export default function LoadDetailPage() {
           
           {/* Status quick select */}
           <div className="flex items-center gap-3">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Motive Dispatch Status</span>
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Dispatch Status</span>
             <select
               value={load.status}
-              onChange={e => patch({ status: e.target.value as LoadStatus }, 'Motive Status update success')}
+              onChange={e => patch({ status: e.target.value as LoadStatus }, 'Dispatch status updated')}
               className="rounded-xl border border-white/10 bg-[#0E1524] px-4 py-2.5 text-xs font-bold text-slate-200 focus:outline-none focus:border-amber-500/40"
             >
               {LOAD_STATUS_ORDER.map(status => (
@@ -351,7 +351,7 @@ export default function LoadDetailPage() {
           </div>
         </div>
 
-        {/* Motive Pipeline Bar */}
+        {/* Load status pipeline */}
         <div className="glass-card p-5">
           <StatusPipeline currentStatus={load.status} />
         </div>
@@ -408,7 +408,7 @@ export default function LoadDetailPage() {
                       </p>
                     </div>
                     <div>
-                      <p className="text-[10px] uppercase font-bold text-slate-500">Motive Fleet Equipment</p>
+                      <p className="text-[10px] uppercase font-bold text-slate-500">Assigned Equipment</p>
                       <p className="text-sm font-semibold text-white mt-0.5">
                         {carrier ? EQUIPMENT_TYPE_LABELS[carrier.equipmentType] : '—'}
                       </p>
@@ -525,7 +525,7 @@ export default function LoadDetailPage() {
                   </div>
                   <div className="mt-3 p-4 rounded-xl bg-white/[0.02] border border-white/[0.04] flex items-center justify-between">
                     <div>
-                      <p className="text-[10px] uppercase font-bold text-slate-500">Broker MC & Credit Score (DataTruck Integration)</p>
+                      <p className="text-[10px] uppercase font-bold text-slate-500">Broker MC & Credit Profile</p>
                       <p className="text-xs text-slate-300 mt-1">
                         MC #: <span className="font-mono text-white font-semibold">{load.brokerMC || 'MC-18824'}</span> · 
                         Credit Index: <span className="text-emerald-400 font-bold">96/100</span> · 
@@ -637,7 +637,9 @@ export default function LoadDetailPage() {
                         </div>
 
                         <div className="flex gap-2 pt-2 border-t border-white/5">
-                          <label className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-amber-500/20 bg-amber-500/5 px-2.5 py-2 text-[10px] font-black uppercase tracking-wider text-amber-400 cursor-pointer transition-all hover:bg-amber-500/10 ${uploadingField === doc.field ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                          <label
+                            htmlFor={`upload-${doc.field}`}
+                            className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-amber-500/20 bg-amber-500/5 px-2.5 py-2 text-[10px] font-black uppercase tracking-wider text-amber-400 cursor-pointer transition-all hover:bg-amber-500/10 ${uploadingField === doc.field ? 'opacity-50 cursor-not-allowed' : ''}`}>
                             {uploadingField === doc.field ? (
                               <RefreshCw size={11} className="animate-spin" />
                             ) : (
@@ -645,6 +647,8 @@ export default function LoadDetailPage() {
                             )}
                             Upload
                             <input
+                              id={`upload-${doc.field}`}
+                              aria-label={`Upload ${doc.label}`}
                               type="file"
                               disabled={uploadingField === doc.field}
                               className="hidden"

@@ -6,10 +6,8 @@ import {
   AlertTriangle, Clock, Weight, DollarSign, Building2, Timer,
   Moon, Zap, XCircle, PhoneCall, ChevronDown, RefreshCw, Plus,
   Image as ImageIcon, FileText, Trash2, Eye, Navigation, AlertOctagon, Wrench,
-  Sparkles, UploadCloud, Loader2, X, ChevronRight, ExternalLink
+  Sparkles, UploadCloud, Loader2, X
 } from 'lucide-react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { useSonexAuth } from '@/lib/sonexAuth';
 import { FuelPriceWidget } from '@/components/sonex/FuelPriceWidget';
@@ -95,22 +93,22 @@ const openDocument = (url: string) => {
 };
 
 const STATUS_COLORS: Record<LoadStatus, string> = {
-  booked: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
-  dispatched: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
-  in_transit: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
-  delivered: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
-  pod_received: 'bg-teal-500/20 text-teal-300 border-teal-500/30',
-  invoiced: 'bg-violet-500/20 text-violet-300 border-violet-500/30',
-  paid: 'bg-green-500/20 text-green-300 border-green-500/30',
+  booked: 'bg-blue-50 text-blue-700 border-blue-200',
+  dispatched: 'bg-sky-50 text-sky-700 border-sky-200',
+  in_transit: 'bg-amber-50 text-amber-700 border-amber-200',
+  delivered: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  pod_received: 'bg-teal-50 text-teal-700 border-teal-200',
+  invoiced: 'bg-violet-50 text-violet-700 border-violet-200',
+  paid: 'bg-green-50 text-green-700 border-green-200',
 };
 
 const CHECKIN_CONFIGS: Record<CheckinEvent, {
   label: string; subLabel?: string;
   Icon: React.ElementType; color: string; bg: string; border: string;
 }> = {
-  arrived_pickup:   { label: 'Arrived at Pickup',  Icon: Truck,        color: 'text-black', bg: 'bg-amber-500 hover:bg-amber-400',   border: 'border-amber-400' },
-  loaded_departing: { label: 'Loaded — Departing', Icon: PackageCheck, color: 'text-black', bg: 'bg-amber-500 hover:bg-amber-400',   border: 'border-amber-400' },
-  arrived_delivery: { label: 'Arrived at Delivery',Icon: MapPin,       color: 'text-black', bg: 'bg-amber-500 hover:bg-amber-400',   border: 'border-amber-400' },
+  arrived_pickup:   { label: 'Arrived at Pickup',  Icon: Truck,        color: 'text-white', bg: 'bg-violet-600 hover:bg-violet-700', border: 'border-violet-600' },
+  loaded_departing: { label: 'Loaded - Departing', Icon: PackageCheck, color: 'text-white', bg: 'bg-violet-600 hover:bg-violet-700', border: 'border-violet-600' },
+  arrived_delivery: { label: 'Arrived at Delivery',Icon: MapPin,       color: 'text-white', bg: 'bg-violet-600 hover:bg-violet-700', border: 'border-violet-600' },
   delivered:        { label: 'Mark as Delivered',  Icon: CheckCircle,  color: 'text-white', bg: 'bg-emerald-600 hover:bg-emerald-500',border: 'border-emerald-500' },
   detention_start:  { label: 'Start Detention',    subLabel: 'Waiting at facility', Icon: Timer, color: 'text-black', bg: 'bg-orange-500 hover:bg-orange-400', border: 'border-orange-400' },
   detention_end:    { label: 'End Detention',      Icon: Timer,        color: 'text-white', bg: 'bg-orange-700 hover:bg-orange-600',  border: 'border-orange-600' },
@@ -138,7 +136,7 @@ function getUploadSlots(doneEvents: Set<CheckinEvent>): StageUploadConfig[] {
       key: 'bol',
       stage: 'pickup',
       label: 'Bill of Lading (BOL)',
-      sublabel: 'Signed BOL at pickup â€” required',
+      sublabel: 'Signed BOL at pickup - required',
       docField: 'bolUrl',
       color: '#F59E0B', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.25)',
       Icon: FileText,
@@ -195,7 +193,7 @@ function getUploadSlots(doneEvents: Set<CheckinEvent>): StageUploadConfig[] {
       key: 'pod',
       stage: 'delivery',
       label: 'Proof of Delivery (POD)',
-      sublabel: 'Signed POD â€” advances status',
+      sublabel: 'Signed POD - advances status',
       docField: 'podUrl',
       advancesStatus: 'pod_received',
       color: '#10B981', bg: 'rgba(16,185,129,0.10)', border: 'rgba(16,185,129,0.30)',
@@ -380,7 +378,9 @@ function UploadSlotCard({ slot, load, photos, doneEvents, onRefresh, carrierId }
         const file = files[0];
         const result = await uploadFile(file, 'load-documents', `${load.id}/${slot.key}`);
         const updateData: Partial<SonexLoad> = { [slot.docField]: result.url } as any;
-        if (slot.advancesStatus && load.status === 'delivered') {
+        // POD is unlocked only after arrival at delivery. Promote it immediately so
+        // the carrier does not lose the paperwork action when the load leaves active work.
+        if (slot.advancesStatus) {
           (updateData as any).status = slot.advancesStatus;
         }
         await updateLoad(load.id, updateData as any);
@@ -557,22 +557,13 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
     setPendingEvent(null);
     try {
       await addCheckin({ loadId: load.id, event, timestamp: new Date().toISOString(), notes, loggedBy: 'carrier' });
-      
-      const statusMap: Partial<Record<CheckinEvent, LoadStatus>> = {
-        arrived_pickup: 'dispatched',
-        loaded_departing: 'in_transit',
-        arrived_delivery: 'in_transit',
-        delivered: 'delivered',
-      };
-      if (statusMap[event]) await updateLoad(load.id, { status: statusMap[event] });
-
       toast.success(`✓ ${CHECKIN_EVENT_LABELS[event]} logged!`, {
         style: { background: '#0D1F3C', color: '#FCD34D', border: '1px solid rgba(245,158,11,0.3)' },
       });
       await refreshDetail();
       onRefresh();
-    } catch {
-      toast.error('Failed to log event. Please try again.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to log event. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -611,25 +602,25 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
       )}
 
       <div className="rounded-2xl overflow-hidden" style={{
-        background: 'rgba(13,31,60,0.55)',
-        border: '1px solid rgba(245,158,11,0.35)',
-        boxShadow: '0 0 30px rgba(245,158,11,0.08), 0 8px 32px rgba(0,0,0,0.4)',
+        background: '#ffffff',
+        border: '1px solid #dbe4ef',
+        boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
       }}>
         {/* Header */}
         <div className="px-5 py-4 flex items-center justify-between"
-          style={{ borderBottom: '1px solid rgba(245,158,11,0.12)', background: 'rgba(245,158,11,0.04)' }}>
-          <Link href={`/carrier/loads/${load.id}`} className="group cursor-pointer">
-            <div className="text-xs text-amber-500/70 font-mono tracking-widest uppercase mb-0.5 group-hover:text-amber-400 transition-colors">Active Load (Tap for Workspace)</div>
-            <div className="text-2xl font-black text-amber-400 font-mono tracking-tight flex items-center gap-1.5 group-hover:text-amber-300 transition-colors">
-              {load.loadNumber} <ExternalLink size={15} />
+          style={{ borderBottom: '1px solid #ede9fe', background: '#f5f3ff' }}>
+          <div>
+            <div className="text-[11px] text-violet-600 font-semibold tracking-widest uppercase mb-0.5">Active assignment</div>
+            <div className="text-xl font-black text-violet-700 font-mono tracking-tight">
+              {load.loadNumber}
             </div>
-          </Link>
+          </div>
           <div className="flex items-center gap-2">
             <StatusBadge status={load.status} />
             {load.brokerPhone && (
               <a href={`tel:${load.brokerPhone}`}
-                className="w-9 h-9 rounded-xl flex items-center justify-center bg-white/5 hover:bg-white/10 border border-white/10 transition-all">
-                <PhoneCall size={15} className="text-amber-400" />
+                className="w-9 h-9 rounded-md flex items-center justify-center bg-white hover:bg-violet-50 border border-violet-200 transition-colors">
+                <PhoneCall size={15} className="text-violet-700" />
               </a>
             )}
           </div>
@@ -639,9 +630,9 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
         <div className="px-5 py-4">
           <div className="flex items-stretch gap-3">
             <div className="flex flex-col items-center gap-1 pt-1">
-              <div className="w-3 h-3 rounded-full border-2 border-amber-500 bg-amber-500/20" />
-              <div className="flex-1 w-0.5 bg-gradient-to-b from-amber-500/50 to-slate-500/30 min-h-[28px]" />
-              <MapPin size={14} className="text-amber-400" />
+              <div className="w-3 h-3 rounded-full border-2 border-violet-600 bg-violet-100" />
+              <div className="flex-1 w-0.5 bg-gradient-to-b from-violet-500/60 to-sky-400/40 min-h-[28px]" />
+              <MapPin size={14} className="text-sky-600" />
             </div>
             <div className="flex-1 space-y-3">
               <div className="flex justify-between items-start gap-2">
@@ -654,7 +645,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
                   </div>
                 </div>
                 <a href={`geo:0,0?q=${encodeURIComponent(`${load.pickupFacility} ${load.pickupAddress || ''} ${load.pickupCity} ${load.pickupState} ${load.pickupZip || ''}`)}(${encodeURIComponent(load.pickupFacility.replace(/[()]/g, ''))})`}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 transition-all shrink-0">
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[10px] font-bold text-violet-700 bg-violet-50 border border-violet-200 hover:bg-violet-100 transition-colors shrink-0">
                   <Navigation size={10} /> Navigate
                 </a>
               </div>
@@ -668,7 +659,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
                   </div>
                 </div>
                 <a href={`geo:0,0?q=${encodeURIComponent(`${load.deliveryFacility} ${load.deliveryAddress || ''} ${load.deliveryCity} ${load.deliveryState} ${load.deliveryZip || ''}`)}(${encodeURIComponent(load.deliveryFacility.replace(/[()]/g, ''))})`}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 transition-all shrink-0">
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[10px] font-bold text-violet-700 bg-violet-50 border border-violet-200 hover:bg-violet-100 transition-colors shrink-0">
                   <Navigation size={10} /> Navigate
                 </a>
               </div>
@@ -677,12 +668,12 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
 
           {/* Cargo + Broker */}
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <div className="rounded-xl px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="rounded-md px-3 py-2.5 bg-slate-50 border border-slate-200">
               <div className="text-slate-500 text-[10px] uppercase tracking-widest flex items-center gap-1 mb-0.5"><Weight size={10} />Cargo</div>
               <div className="text-white text-sm font-medium truncate">{load.commodity}</div>
               <div className="text-slate-400 text-xs">{load.weight.toLocaleString()} lbs · {load.miles.toLocaleString()} mi</div>
             </div>
-            <div className="rounded-xl px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="rounded-md px-3 py-2.5 bg-slate-50 border border-slate-200">
               <div className="text-slate-500 text-[10px] uppercase tracking-widest flex items-center gap-1 mb-0.5"><Building2 size={10} />Broker</div>
               <div className="text-white text-sm font-medium truncate">{load.brokerName}</div>
               <div className="text-slate-400 text-xs">{load.brokerContact || load.brokerPhone}</div>
@@ -690,13 +681,13 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
           </div>
 
           {/* Pay */}
-          <div className="mt-3 rounded-xl px-4 py-3" style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)' }}>
+          <div className="mt-3 rounded-md px-4 py-3 bg-violet-50 border border-violet-100">
             <div className="flex items-center justify-between">
               <div><div className="text-slate-400 text-xs mb-0.5">Gross</div><div className="text-slate-300 text-sm font-mono">{fmt$(load.rate)}</div></div>
               <div className="text-slate-600 text-sm">-</div>
               <div><div className="text-slate-400 text-xs mb-0.5">Fee ({load.dispatchFeePercent}%)</div><div className="text-slate-400 text-sm font-mono">{fmt$(load.dispatchFeeAmount)}</div></div>
-              <div className="text-amber-500/60 text-sm">=</div>
-              <div className="text-right"><div className="text-amber-400/80 text-xs mb-0.5">Your Net</div><div className="text-amber-400 text-xl font-black font-mono">{fmt$(load.carrierNet)}</div></div>
+              <div className="text-violet-500 text-sm">=</div>
+              <div className="text-right"><div className="text-violet-600 text-xs mb-0.5">Your Net</div><div className="text-violet-700 text-xl font-black font-mono">{fmt$(load.carrierNet)}</div></div>
             </div>
           </div>
 
@@ -709,15 +700,15 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
         </div>
 
         {/* â”€â”€ Tabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-        <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          <div className="flex" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ borderTop: '1px solid #e2e8f0' }}>
+          <div className="flex" style={{ borderBottom: '1px solid #e2e8f0' }}>
             {[
               { id: 'checkin', label: 'Check-In' },
               { id: 'docs', label: `Documents & Photos${uploadedCount > 0 ? ` (${uploadedCount})` : ''}` },
             ].map(tab => (
               <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}
-                className={`flex-1 py-3 text-xs font-bold transition-all ${activeTab === tab.id ? 'text-amber-400' : 'text-slate-500 hover:text-slate-300'}`}
-                style={{ borderBottom: activeTab === tab.id ? '2px solid #F59E0B' : '2px solid transparent' }}>
+                className={`flex-1 py-3 text-xs font-bold transition-colors ${activeTab === tab.id ? 'text-violet-700' : 'text-slate-500 hover:text-slate-800'}`}
+                style={{ borderBottom: activeTab === tab.id ? '2px solid #6d28d9' : '2px solid transparent' }}>
                 {tab.label}
               </button>
             ))}
@@ -798,7 +789,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
                     ? setPendingEvent(nextEvent) : handleCheckin(nextEvent)}
                   disabled={loading}
                   className={`w-full rounded-2xl font-bold text-lg flex items-center justify-center gap-3 transition-all active:scale-[0.98] ${CHECKIN_CONFIGS[nextEvent].bg} ${CHECKIN_CONFIGS[nextEvent].color} ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
-                  style={{ height: '60px', border: '1px solid', borderColor: CHECKIN_CONFIGS[nextEvent].border.replace('border-', ''), boxShadow: '0 4px 20px rgba(245,158,11,0.15)' }}>
+                  style={{ height: '60px', boxShadow: '0 8px 20px rgba(109,40,217,0.22)' }}>
                   {React.createElement(CHECKIN_CONFIGS[nextEvent].Icon, { size: 22 })}
                   {loading ? 'Logging...' : CHECKIN_CONFIGS[nextEvent].label}
                 </button>
@@ -914,16 +905,14 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
 // â”€â”€â”€ Past Load Row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function PastLoadRow({ load }: { load: SonexLoad }) {
-  const router = useRouter();
   return (
-    <div 
-      onClick={() => router.push(`/carrier/loads/${load.id}`)}
-      className="flex items-center gap-3 px-4 py-3.5 rounded-xl cursor-pointer hover:border-amber-500/20 hover:bg-white/[0.02] transition-all group"
-      style={{ background: 'rgba(13,31,60,0.4)', border: '1px solid rgba(255,255,255,0.05)' }}
+    <div
+      className="flex items-center gap-3 px-4 py-3.5 rounded-xl"
+      style={{ background: '#ffffff', border: '1px solid #dbe4ef' }}
     >
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-          <span className="font-mono text-amber-400 text-sm font-bold group-hover:text-amber-300">{load.loadNumber}</span>
+          <span className="font-mono text-amber-400 text-sm font-bold">{load.loadNumber}</span>
           <StatusBadge status={load.status} />
         </div>
         <div className="text-slate-300 text-xs truncate">
@@ -936,7 +925,6 @@ function PastLoadRow({ load }: { load: SonexLoad }) {
         <div className="text-amber-400 text-base font-bold font-mono">{fmt$(load.carrierNet)}</div>
         <div className="text-slate-600 text-[10px]">net pay</div>
       </div>
-      <ChevronRight size={14} className="text-slate-600 group-hover:text-amber-400 flex-shrink-0 transition-colors" />
     </div>
   );
 }
@@ -973,6 +961,9 @@ export default function CarrierLoadsPage() {
       setLoads(all);
     } catch (e) {
       console.error(e);
+      if (e instanceof Error && e.message.includes('session has expired')) {
+        window.location.assign('/sonex/login');
+      }
     } finally {
       setLoading(false);
       setInitialLoading(false);
@@ -988,34 +979,14 @@ export default function CarrierLoadsPage() {
     return () => clearInterval(interval);
   }, [refresh]);
 
-  // Manual Add Load Modal State
-  const [showManualModal, setShowManualModal] = useState(false);
-  const [carrierFee, setCarrierFee] = useState(10);
-
-  useEffect(() => {
-    if (carrierId) {
-      getCarrier(carrierId).then(c => {
-        if (c) setCarrierFee(c.dispatchFeePercent);
-      });
-    }
-  }, [carrierId]);
-
   return (
-    <div className="mx-auto max-w-[1180px] px-3 py-5 sm:px-5 space-y-5">
+    <div data-carrier-workspace className="mx-auto max-w-[1180px] px-3 py-5 sm:px-5 space-y-5">
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-black text-white tracking-tight">My Loads</h1>
           <p className="text-slate-500 text-sm mt-0.5">Active assignment and history</p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Manual Add Load Button */}
-          <button
-            onClick={() => setShowManualModal(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black text-amber-400 bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 transition-all shrink-0 tracking-wide uppercase"
-          >
-            <Plus size={13} />
-            Add Load Manually
-          </button>
           <a href="tel:(346)421-2681" 
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-all shrink-0 tracking-wide uppercase">
             <AlertOctagon size={13} className="animate-pulse" />
@@ -1069,15 +1040,6 @@ export default function CarrierLoadsPage() {
       {/* Fuel Pricing Widget */}
       <FuelPriceWidget />
 
-      {/* Manual Add Load Modal */}
-      {showManualModal && (
-        <NewCarrierLoadModal
-          carrierId={carrierId}
-          carrierFee={carrierFee}
-          onClose={() => setShowManualModal(false)}
-          onSaved={refresh}
-        />
-      )}
     </div>
   );
 }

@@ -5,22 +5,21 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { LucideIcon } from 'lucide-react';
 import {
-  BarChart3, CalendarDays, ChevronLeft, ChevronRight, CircleHelp, Command,
+  Command,
   LayoutDashboard, LogOut, Menu, Package, ReceiptText, Search, Settings,
-  Truck, Users, Wrench,
-  Plus, Moon, Send, UserCircle,
+  Users, Plus,
 } from 'lucide-react';
 import { useSonexAuth } from '@/lib/sonexAuth';
 import { NotificationBell } from '@/components/sonex/NotificationBell';
 import { getCarriers, getLoads } from '@/lib/sonexStore';
-import { DatatruckMark } from '@/components/sonex/DatatruckMark';
+import { SonexMark } from '@/components/sonex/SonexMark';
 
 type BadgeKey = 'carriers' | 'activeLoads';
 type NavItem = {
   label: string;
   href: string;
   icon: LucideIcon;
-  group: 'Operations' | 'Finance' | 'Fleet' | 'Administration';
+  group: 'Operations' | 'Finance' | 'Administration';
   badge?: BadgeKey;
   exact?: boolean;
 };
@@ -28,21 +27,17 @@ type NavItem = {
 const navigation: NavItem[] = [
   { label: 'Dashboard', href: '/sonex', icon: LayoutDashboard, group: 'Operations', exact: true },
   { label: 'Load Management', href: '/sonex/loads', icon: Package, group: 'Operations', badge: 'activeLoads' },
-  { label: 'Planning Board', href: '/sonex/planning', icon: CalendarDays, group: 'Operations' },
   { label: 'Carriers & Drivers', href: '/sonex/carriers', icon: Users, group: 'Operations', badge: 'carriers' },
   { label: 'Accounting', href: '/sonex/accounting', icon: ReceiptText, group: 'Finance' },
-  { label: 'Performance Reports', href: '/sonex/load-log', icon: BarChart3, group: 'Finance' },
-  { label: 'Fleet Management', href: '/sonex/fleet', icon: Wrench, group: 'Fleet' },
   { label: 'Settings', href: '/sonex/settings', icon: Settings, group: 'Administration' },
 ];
 
-const groups: NavItem['group'][] = ['Operations', 'Finance', 'Fleet', 'Administration'];
+const groups: NavItem['group'][] = ['Operations', 'Finance', 'Administration'];
 
 export default function SonexLayout({ children }: { children: React.ReactNode }) {
   const { isAdmin, user, logout, isAuthenticated } = useSonexAuth();
   const pathname = usePathname();
   const router = useRouter();
-  const [collapsed, setCollapsed] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -91,6 +86,8 @@ export default function SonexLayout({ children }: { children: React.ReactNode })
     router.push(href);
   };
 
+  const currentSection = navigation.find(isActive)?.label ?? 'Dispatch';
+
   if (pathname === '/sonex/login') return <>{children}</>;
 
   if (!isAuthenticated || !isAdmin) {
@@ -105,10 +102,9 @@ export default function SonexLayout({ children }: { children: React.ReactNode })
 
       <aside className={`fixed inset-y-0 left-0 z-50 flex w-[84px] flex-col bg-gradient-to-b from-[#8d42c9] via-[#6847d2] to-[#2f66d5] text-white transition-all duration-200 ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         <div className="flex h-[72px] items-center justify-center border-b border-white/15">
-          <Link href="/sonex" className="flex min-w-0 items-center gap-2.5">
-            <DatatruckMark />
+          <Link href="/sonex" className="flex min-w-0 items-center gap-2.5" title="Sonex Dispatch">
+            <SonexMark />
           </Link>
-          <button onClick={() => setCollapsed(true)} title="Collapse sidebar" className="absolute -right-3 top-[51px] grid h-7 w-7 place-items-center rounded-full border-2 border-[#7445ce] bg-white text-[#5435bd] shadow"><ChevronLeft size={15} /></button>
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
@@ -136,7 +132,7 @@ export default function SonexLayout({ children }: { children: React.ReactNode })
 
         <div className="mt-auto border-t border-white/15 p-2">
           <div className="mb-2 grid h-8 place-items-center bg-white/20 text-[10px] font-semibold text-white">{user?.avatar ?? 'SD'}</div>
-          <button onClick={() => { logout(); router.push('/sonex/login'); }} title="Sign out" className="flex h-10 w-full items-center justify-center text-white/75 hover:bg-white/10 hover:text-white">
+          <button onClick={async () => { await logout(); window.location.assign('/sonex/login'); }} title="Sign out" className="flex h-10 w-full items-center justify-center text-white/75 hover:bg-white/10 hover:text-white">
             <LogOut size={18} />
           </button>
         </div>
@@ -145,19 +141,19 @@ export default function SonexLayout({ children }: { children: React.ReactNode })
       <div className={`min-h-screen transition-all duration-200 ${sidebarWidth}`}>
         <header className="sticky top-0 z-30 flex h-[72px] items-center gap-4 bg-gradient-to-r from-[#8b3fc5] via-[#6b46d2] to-[#405bd9] px-5 text-white">
           <button onClick={() => setMobileOpen(true)} title="Open navigation" className="inline-flex h-9 w-9 items-center justify-center text-white lg:hidden"><Menu size={19} /></button>
-          <span className="hidden text-[20px] font-medium lg:inline-flex">Load management / <span className="ml-1">Dispatch board</span></span>
+          <span className="hidden text-[20px] font-medium lg:inline-flex">Sonex Dispatch / <span className="ml-1">{currentSection}</span></span>
           <button onClick={() => setCommandOpen(true)} className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-full bg-white px-4 text-left text-sm text-[#43517a] shadow-sm sm:mx-auto sm:max-w-[395px]">
             <Search size={15} className="text-blue-500" />
             <span className="truncate">Ctrl + K to search</span>
-            <span className="ml-auto text-xs text-[#5e35c1]">All⌄</span>
+            <span className="ml-auto text-xs text-[#5e35c1]">All</span>
           </button>
           <div className="ml-auto flex items-center gap-3">
-            <button title="Live support" className="hidden rounded-full border border-white/80 px-5 py-2 text-sm sm:inline-flex">Live Support</button>
-            <button title="Create new" className="hidden rounded-full border border-white/80 px-5 py-2 text-sm sm:inline-flex"><Plus size={16} /> Create new</button>
-            <span className="hidden text-sm lg:inline">Datatruck 1.0⌄</span><Send size={20} /><Moon size={20} /><NotificationBell role="admin" /><CircleHelp size={20} /><UserCircle size={28} />
+            <button onClick={() => navigate('/sonex/loads?new=1')} title="Create load" className="hidden items-center gap-2 rounded-full border border-white/80 px-5 py-2 text-sm sm:inline-flex"><Plus size={16} /> New load</button>
+            <NotificationBell role="admin" />
+            <button onClick={() => navigate('/sonex/settings')} title="Settings" className="grid h-9 w-9 place-items-center rounded-full hover:bg-white/10"><Settings size={19} /></button>
           </div>
         </header>
-        <main className="min-h-[calc(100vh-64px)]">{children}</main>
+        <main data-tms-surface className="min-h-[calc(100vh-64px)]">{children}</main>
       </div>
 
       {commandOpen && (

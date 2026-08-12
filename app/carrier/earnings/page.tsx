@@ -105,19 +105,19 @@ function fmtDate(d: string) {
 
 // ─── Summary Card ─────────────────────────────────────────────────────────────
 
-function SummaryCard({ icon: Icon, label, value, sub, amber }: {
-  icon: React.ElementType; label: string; value: string; sub?: string; amber?: boolean;
+function SummaryCard({ icon: Icon, label, value, sub, accent }: {
+  icon: React.ElementType; label: string; value: string; sub?: string; accent?: boolean;
 }) {
   return (
-    <div className={`glass-card p-5 flex flex-col gap-3 ${amber ? 'border-amber-500/20 ring-1 ring-amber-500/10' : ''}`}>
+    <div className={`glass-card p-5 flex flex-col gap-3 ${accent ? 'border-violet-200 ring-1 ring-violet-100' : ''}`}>
       <div className="flex items-center justify-between">
-        <div className={`p-2 rounded-xl ${amber ? 'bg-amber-500/15' : 'bg-white/[0.06]'}`}>
-          <Icon size={16} className={amber ? 'text-amber-400' : 'text-slate-400'} />
+        <div className={`p-2 rounded-lg ${accent ? 'bg-violet-50' : 'bg-slate-100'}`}>
+          <Icon size={16} className={accent ? 'text-violet-700' : 'text-slate-500'} />
         </div>
       </div>
       <div>
         <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">{label}</p>
-        <p className={`text-2xl font-bold mt-1 ${amber ? 'text-amber-400' : 'text-white'}`}>{value}</p>
+        <p className={`text-2xl font-bold mt-1 ${accent ? 'text-violet-700' : 'text-slate-900'}`}>{value}</p>
         {sub && <p className="text-xs text-slate-500 mt-0.5">{sub}</p>}
       </div>
     </div>
@@ -292,6 +292,9 @@ export default function CarrierEarningsPage() {
       ));
     } catch (e) {
       console.error(e);
+      if (e instanceof Error && e.message.includes('session has expired')) {
+        window.location.assign('/sonex/login');
+      }
     }
   }, [carrierId]);
 
@@ -392,16 +395,16 @@ export default function CarrierEarningsPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6 space-y-6 animate-fade-in">
+    <div data-carrier-workspace className="max-w-6xl mx-auto px-4 py-6 space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-black text-white tracking-tight">Financial Reporting</h1>
+          <h1 className="text-xl font-black text-slate-900 tracking-tight">Financial Reporting</h1>
           <p className="text-slate-500 text-sm mt-0.5">Revenue, dispatch fees, and settlements analysis</p>
         </div>
         <button
           onClick={handleExportCSV}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 text-black font-semibold text-xs hover:bg-amber-400 transition-all active:scale-95 shrink-0"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 text-white font-semibold text-xs hover:bg-violet-700 transition-all active:scale-95 shrink-0"
         >
           <Download size={13} /> Export CSV
         </button>
@@ -442,7 +445,7 @@ export default function CarrierEarningsPage() {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <SummaryCard icon={DollarSign} label="Total Gross Revenue" value={fmt$(totalGross)} sub={`${filteredLoads.length} loads`} />
-        <SummaryCard icon={TrendingUp} label="Total Dispatch Fees" value={fmt$(totalFees)} sub={`${totalGross > 0 ? (totalFees / totalGross * 100).toFixed(1) : 0}% fee`} amber />
+        <SummaryCard icon={TrendingUp} label="Total Dispatch Fees" value={fmt$(totalFees)} sub={`${totalGross > 0 ? (totalFees / totalGross * 100).toFixed(1) : 0}% fee`} accent />
         <SummaryCard icon={DollarSign} label="Total Net Pay" value={fmt$(totalNet)} sub="Your take-home" />
         <SummaryCard icon={BarChart2} label="Average RPM" value={`$${avgRPM.toFixed(2)}/mi`} sub={`${totalMiles.toLocaleString()} total miles`} />
       </div>

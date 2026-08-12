@@ -170,7 +170,6 @@ export interface SonexCargoPhoto {
   uploadedBy: 'admin' | 'carrier';
 }
 
-
 export interface SonexSettlement {
   id: string;
   carrierId: string;
@@ -264,7 +263,7 @@ export const INSURANCE_TYPE_LABELS: Record<InsuranceType, string> = {
 
 export const CHECKIN_EVENT_LABELS: Record<CheckinEvent, string> = {
   arrived_pickup:   'Arrived at Pickup',
-  loaded_departing: 'Loaded â€” Departing',
+  loaded_departing: 'Loaded - Departing',
   arrived_delivery: 'Arrived at Delivery',
   delivered:        'Delivered',
   detention_start:  'Detention Started',
