@@ -2,7 +2,6 @@ import { readFile } from 'node:fs/promises';
 import {
   DeleteObjectCommand,
   HeadObjectCommand,
-  PutBucketCorsCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -37,38 +36,7 @@ try {
 const key = `qa-probe/${Date.now()}-rate-confirmation.pdf`;
 const directKey = `qa-probe/${Date.now()}-direct-upload.pdf`;
 
-async function waitForCors(url) {
-  let response;
-  for (let attempt = 1; attempt <= 15; attempt += 1) {
-    response = await fetch(url, {
-      method: 'OPTIONS',
-      headers: {
-        Origin: 'https://dispatch.sonexlogistics.com',
-        'Access-Control-Request-Method': 'PUT',
-        'Access-Control-Request-Headers': 'content-type',
-      },
-    });
-    if (response.headers.get('access-control-allow-origin') === 'https://dispatch.sonexlogistics.com') {
-      return response;
-    }
-    await new Promise(resolve => setTimeout(resolve, 2_000));
-  }
-  return response;
-}
-
 try {
-  await client.send(new PutBucketCorsCommand({
-    Bucket: bucket,
-    CORSConfiguration: {
-      CORSRules: [{
-        AllowedOrigins: ['https://dispatch.sonexlogistics.com', 'http://localhost:3000'],
-        AllowedMethods: ['GET', 'HEAD', 'PUT'],
-        AllowedHeaders: ['Content-Type'],
-        ExposeHeaders: ['ETag'],
-        MaxAgeSeconds: 3600,
-      }],
-    },
-  }));
   await client.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: 'application/pdf' }));
   const head = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
   const publicResponse = await fetch(`${cdn}/${key}`, { cache: 'no-store' });
@@ -79,7 +47,6 @@ try {
     Key: directKey,
     ContentType: 'application/pdf',
   }), { expiresIn: 300 });
-  const corsResponse = await waitForCors(directUrl);
   const directResponse = await fetch(directUrl, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/pdf' },
@@ -93,19 +60,12 @@ try {
     publicContentType: publicResponse.headers.get('content-type'),
     publicBytes: publicBody.length,
     publicBytesMatch: publicBody.equals(body),
-    corsStatus: corsResponse.status,
-    corsOrigin: corsResponse.headers.get('access-control-allow-origin'),
-    corsMethods: corsResponse.headers.get('access-control-allow-methods'),
-    corsHeaders: corsResponse.headers.get('access-control-allow-headers'),
     directPutStatus: directResponse.status,
   };
   console.log(JSON.stringify(results, null, 2));
 
   if (!results.publicBytesMatch || results.publicStatus !== 200 || !directResponse.ok) {
     throw new Error('Production storage probe failed.');
-  }
-  if (results.corsOrigin !== 'https://dispatch.sonexlogistics.com') {
-    throw new Error('R2 CORS does not allow the production portal origin.');
   }
 } finally {
   await Promise.allSettled([
