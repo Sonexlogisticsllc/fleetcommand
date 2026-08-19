@@ -1,5 +1,3 @@
-import { PDFParse } from 'pdf-parse';
-
 export const MAX_DOCUMENT_EXTRACTION_BYTES = 15 * 1024 * 1024;
 
 export type ExtractableDocumentType = 'rate_confirmation' | 'bol';
@@ -127,6 +125,10 @@ function validateExtractedLoad(data: ParsedLoadDocument) {
 }
 
 async function extractPdfText(buffer: Buffer) {
+  // This dependency has browser-oriented optional internals. Loading it lazily
+  // keeps the API module itself bootable on Vercel and lets this route return
+  // a useful JSON error instead of Vercel's generic HTML 500 page.
+  const { PDFParse } = await import('pdf-parse');
   const parser = new PDFParse({ data: new Uint8Array(buffer) });
   try {
     return (await parser.getText()).text.trim();
