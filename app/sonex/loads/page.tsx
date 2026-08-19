@@ -159,7 +159,7 @@ function NewLoadModal({ carriers, onClose, onSaved, onAiParse }: NewLoadModalPro
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative flex h-full w-full max-w-[720px] flex-col border-l border-slate-200 bg-[#f4f7fb] shadow-2xl">
+      <div data-sonex-load-modal className="relative flex h-full w-full max-w-[720px] flex-col border-l border-slate-200 bg-[#f4f7fb] shadow-2xl">
         <div className="relative flex shrink-0 items-start justify-between overflow-hidden border-b border-slate-800 bg-[#101a2f] px-7 py-6">
           <div className="absolute inset-x-0 bottom-0 h-1 bg-blue-500" />
           <div>

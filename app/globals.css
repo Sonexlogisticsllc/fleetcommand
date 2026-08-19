@@ -502,6 +502,15 @@
 [data-sonex-load-workspace] .border-white\/10 { border-color: #e1e7ef !important; }
 [data-sonex-load-workspace] select { background: #ffffff !important; color: #1e293b !important; border-color: #cbd5e1 !important; }
 
+/* The New Load slide-over deliberately uses a dark command header. Keep the
+   legacy light-workspace utility overrides from repainting header copy dark. */
+[data-sonex-load-modal] .text-white { color: #ffffff !important; }
+[data-sonex-load-modal] .text-slate-300 { color: #cbd5e1 !important; }
+[data-sonex-load-modal] .text-slate-400 { color: #94a3b8 !important; }
+[data-portal="sonex"] [data-tms-surface] [data-sonex-load-modal] .text-white { color: #ffffff !important; }
+[data-portal="sonex"] [data-tms-surface] [data-sonex-load-modal] .text-slate-300 { color: #cbd5e1 !important; }
+[data-portal="sonex"] [data-tms-surface] [data-sonex-load-modal] .text-slate-400 { color: #94a3b8 !important; }
+
 /* Carrier portal uses the same operational shell as the dispatcher workspace.
    Status colors remain distinct, but cards and controls share one Sonex system. */
 [data-portal="carrier"] {

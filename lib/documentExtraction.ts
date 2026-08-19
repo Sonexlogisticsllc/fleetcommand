@@ -125,9 +125,11 @@ function validateExtractedLoad(data: ParsedLoadDocument) {
 }
 
 async function extractPdfText(buffer: Buffer) {
-  // This dependency has browser-oriented optional internals. Loading it lazily
-  // keeps the API module itself bootable on Vercel and lets this route return
-  // a useful JSON error instead of Vercel's generic HTML 500 page.
+  // pdf-parse ships a Node worker that installs the canvas-backed DOM globals
+  // PDF.js expects. Vercel's Node runtime does not provide DOMMatrix itself.
+  await import('pdf-parse/worker');
+  // Keep browser-oriented optional internals out of route initialization so
+  // the API can always return JSON instead of Vercel's generic HTML 500 page.
   const { PDFParse } = await import('pdf-parse');
   const parser = new PDFParse({ data: new Uint8Array(buffer) });
   try {
@@ -161,11 +163,13 @@ export async function parseLocalTextDocument(buffer: Buffer, contentType: string
   const data: typeof EMPTY_LOAD = {
     ...EMPTY_LOAD,
     loadNumber: capture(text, /^(?:load|order|shipment)\s*(?:#|number|no\.?|id)?\s*[:#-]?\s*([a-z0-9-]{4,})/im).toUpperCase(),
-    brokerName: capture(text, /^broker(?: name)?\s*[:#-]?\s*(.+)$/im),
-    brokerContact: capture(text, /^broker contact\s*[:#-]?\s*(.+)$/im),
-    brokerPhone: capture(text, /^broker phone\s*[:#-]?\s*(.+)$/im),
-    brokerEmail: capture(text, /^broker email\s*[:#-]?\s*(\S+@\S+)$/im),
-    brokerMC: capture(text, /^(?:broker\s+)?mc(?: number| no\.?)?\s*[:#-]?\s*([a-z0-9-]+)$/im),
+    // PDF tables often flatten adjacent cells onto a single text line. Each
+    // field therefore stops at the next broker label instead of newline-only.
+    brokerName: capture(text, /\bbroker(?: name)?\s*[:#-]?\s*(.+?)(?=\s+broker\s+(?:contact|phone|email|mc)\b|$)/im),
+    brokerContact: capture(text, /\bbroker\s+contact\s*[:#-]?\s*(.+?)(?=\s+broker\s+(?:phone|email|mc)\b|$)/im),
+    brokerPhone: capture(text, /\bbroker\s+phone\s*[:#-]?\s*(.+?)(?=\s+broker\s+(?:email|mc)\b|$)/im),
+    brokerEmail: capture(text, /\bbroker\s+email\s*[:#-]?\s*(\S+@\S+?)(?=\s+broker\s+mc\b|$)/im),
+    brokerMC: capture(text, /\bbroker\s+mc(?:\s+(?:number|no\.?)\s*)?\s*[:#-]?\s*(?:mc\s*)?([a-z0-9-]+)/im),
     pickupFacility: pickup.facility, pickupCity: pickup.city, pickupState: pickup.state, pickupZip: pickup.zip, pickupDate: normalizeDate(pickupDateRaw), pickupTime: normalizeTime(pickupDateRaw),
     deliveryFacility: delivery.facility, deliveryCity: delivery.city, deliveryState: delivery.state, deliveryZip: delivery.zip, deliveryDate: normalizeDate(deliveryDateRaw), deliveryTime: normalizeTime(deliveryDateRaw),
     commodity: capture(text, /\bcommodity\s*[:#-]?\s*(.+?)(?=\s+weight\b|$)/im),
