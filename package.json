@@ -10,12 +10,14 @@
     "qa:seed:local": "node scripts/seed-local-qa.mjs",
     "qa:storage:local": "tsx scripts/qa-local-storage.ts",
     "qa:domain": "tsx scripts/qa-domain.ts",
+    "qa:extraction": "tsx scripts/qa-document-extraction.ts",
     "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1079.0",
     "@aws-sdk/s3-request-presigner": "^3.1108.0",
+    "@google-cloud/documentai": "^10.0.0",
     "@libsql/client": "^0.17.4",
     "@lucia-auth/adapter-drizzle": "^1.1.0",
     "@node-rs/argon2": "^2.0.2",
