@@ -27,9 +27,9 @@ const statusBadge: Record<CarrierStatus, string> = {
 
 const Section = ({ title, icon: Icon, children }: { title: string; icon: React.ElementType; children: React.ReactNode }) => (
   <div>
-    <div className="flex items-center gap-2 mb-3 pb-2 border-b border-white/[0.06]">
-      <Icon size={14} className="text-amber-400" />
-      <h4 className="text-xs font-semibold text-amber-400 uppercase tracking-wider">{title}</h4>
+    <div className="mb-3 flex items-center gap-2 border-b border-slate-200 pb-2">
+      <Icon size={14} className="text-blue-600" />
+      <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-800">{title}</h4>
     </div>
     <div className="grid grid-cols-2 gap-3">{children}</div>
   </div>
@@ -108,7 +108,7 @@ function AddCarrierModal({ onClose, onSaved }: AddCarrierModalProps) {
         value={(form as any)[key]}
         onChange={e => set(key, type === 'number' ? Number(e.target.value) : e.target.value)}
         placeholder={placeholder}
-        className="input-primary text-sm py-2.5"
+        className="h-10 w-full border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
       />
     </div>
   );
@@ -119,7 +119,7 @@ function AddCarrierModal({ onClose, onSaved }: AddCarrierModalProps) {
       <select
         value={(form as any)[key]}
         onChange={e => set(key, e.target.value)}
-        className="input-primary text-sm py-2.5 appearance-none"
+        className="h-10 w-full appearance-none border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
       >
         {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
       </select>
@@ -128,10 +128,10 @@ function AddCarrierModal({ onClose, onSaved }: AddCarrierModalProps) {
 
   const toggle = (label: string, key: string) => (
     <label className="flex items-center justify-between cursor-pointer">
-      <span className="text-sm text-slate-300">{label}</span>
+      <span className="text-sm text-slate-600">{label}</span>
       <div
         onClick={() => set(key, !(form as any)[key])}
-        className={`w-10 h-5 rounded-full border transition-colors relative ${(form as any)[key] ? 'bg-amber-500 border-amber-400' : 'bg-white/10 border-white/10'}`}
+        className={`relative h-5 w-10 rounded-full border transition-colors ${(form as any)[key] ? 'border-blue-600 bg-blue-600' : 'border-slate-300 bg-slate-100'}`}
       >
         <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${(form as any)[key] ? 'translate-x-5' : 'translate-x-0.5'}`} />
       </div>
@@ -142,20 +142,21 @@ function AddCarrierModal({ onClose, onSaved }: AddCarrierModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative w-full max-w-xl h-full flex flex-col animate-slide-in-right"
-        style={{ background: '#080B14', borderLeft: '1px solid rgba(245,158,11,0.15)' }}>
+      <div data-sonex-load-modal className="relative flex h-full w-full max-w-xl flex-col border-l border-slate-200 bg-[#f4f7fb] shadow-2xl animate-slide-in-right">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06] shrink-0">
-          <h3 className="text-base font-bold text-white flex items-center gap-2">
-            <Plus size={16} className="text-amber-400" /> Add New Carrier
-          </h3>
-          <button onClick={onClose} className="p-2 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors">
+        <div className="relative flex shrink-0 items-start justify-between overflow-hidden border-b border-slate-800 bg-[#101a2f] px-6 py-5">
+          <div className="absolute inset-x-0 bottom-0 h-1 bg-blue-500" />
+          <div className="flex items-center gap-3">
+            <span className="inline-flex size-9 items-center justify-center rounded-lg bg-blue-500 text-white shadow-lg shadow-blue-950/30"><Plus size={18} /></span>
+            <div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-300">Carrier operations</p><h3 className="mt-0.5 text-xl font-bold text-white">Add New Carrier</h3><p className="mt-1 text-xs text-slate-300">Create the carrier profile, equipment record, and portal login together.</p></div>
+          </div>
+          <button onClick={onClose} className="rounded-md p-2 text-slate-400 transition-colors hover:bg-white/10 hover:text-white" title="Close add carrier">
             <X size={18} />
           </button>
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+        <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
           <Section title="Contact Info" icon={Users}>
             {input('First Name', 'firstName', 'text', 'John')}
             {input('Last Name', 'lastName', 'text', 'Smith')}
@@ -224,7 +225,7 @@ function AddCarrierModal({ onClose, onSaved }: AddCarrierModalProps) {
                 value={form.notes}
                 onChange={e => set('notes', e.target.value)}
                 rows={3}
-                className="input-primary text-sm py-2.5 resize-none"
+                className="w-full resize-none border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 placeholder="Internal notes about this carrier…"
               />
             </div>
@@ -233,52 +234,52 @@ function AddCarrierModal({ onClose, onSaved }: AddCarrierModalProps) {
           <Section title="Create Carrier Login" icon={KeyRound}>
             <div className="col-span-2">{input('Login Email', 'portalEmail', 'email', 'carrier@example.com')}</div>
             <div className="col-span-2">
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Portal Password <span className="text-amber-400">(min 8 chars)</span></label>
+              <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500">Portal Password <span className="text-blue-600">(min 8 chars)</span></label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={form.portalPassword}
                   onChange={e => set('portalPassword', e.target.value)}
                   placeholder="Create a strong password…"
-                  className="input-primary text-sm py-2.5 pr-10 w-full"
+                  className="h-10 w-full border border-slate-200 bg-white px-3 pr-10 text-sm text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 />
                 <button type="button" onClick={() => setShowPassword(v => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-800">
                   {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
                 </button>
               </div>
             </div>
-            <div className="col-span-2 rounded-xl px-3 py-2.5" style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)' }}>
-              <p className="text-amber-400/80 text-[10px] leading-relaxed">📋 The carrier will use these credentials to log in to their Carrier Portal at your site URL. Save the password — it cannot be recovered once the modal is closed.</p>
+            <div className="col-span-2 border border-blue-100 bg-blue-50 px-3 py-2.5">
+              <p className="text-[10px] leading-relaxed text-blue-800">The carrier will use these credentials to sign in to the Carrier Portal. Save the password now because it cannot be recovered after this panel is closed.</p>
             </div>
           </Section>
         </div>
 
         {/* Footer */}
         {savedCredentials ? (
-          <div className="px-6 py-5 border-t border-white/[0.06] shrink-0">
-            <div className="rounded-xl p-4 mb-4" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)' }}>
-              <div className="flex items-center gap-2 mb-2"><Check size={14} className="text-emerald-400" /><span className="text-emerald-300 font-bold text-sm">Carrier Created Successfully!</span></div>
-              <p className="text-slate-400 text-xs mb-3">Save these credentials and share them with the carrier:</p>
+          <div className="shrink-0 border-t border-slate-200 bg-white px-6 py-5">
+            <div className="mb-4 border border-emerald-200 bg-emerald-50 p-4">
+              <div className="mb-2 flex items-center gap-2"><Check size={14} className="text-emerald-600" /><span className="text-sm font-bold text-emerald-800">Carrier Created Successfully</span></div>
+              <p className="mb-3 text-xs text-slate-600">Save these credentials and share them with the carrier:</p>
               <div className="space-y-2">
-                <div className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                  <span className="text-slate-400 text-xs">Email:</span>
-                  <span className="text-white font-mono text-xs">{savedCredentials.email}</span>
+                <div className="flex items-center justify-between border border-emerald-100 bg-white px-3 py-2">
+                  <span className="text-xs text-slate-500">Email:</span>
+                  <span className="font-mono text-xs text-slate-800">{savedCredentials.email}</span>
                   <button onClick={() => { navigator.clipboard.writeText(savedCredentials.email); toast.success('Copied!'); }} className="p-1"><Copy size={11} className="text-slate-500" /></button>
                 </div>
-                <div className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                  <span className="text-slate-400 text-xs">Password:</span>
-                  <span className="text-white font-mono text-xs">{savedCredentials.password}</span>
+                <div className="flex items-center justify-between border border-emerald-100 bg-white px-3 py-2">
+                  <span className="text-xs text-slate-500">Password:</span>
+                  <span className="font-mono text-xs text-slate-800">{savedCredentials.password}</span>
                   <button onClick={() => { navigator.clipboard.writeText(savedCredentials.password); toast.success('Copied!'); }} className="p-1"><Copy size={11} className="text-slate-500" /></button>
                 </div>
               </div>
             </div>
-            <button onClick={onClose} className="w-full py-3 rounded-xl font-bold text-sm bg-amber-500 text-black hover:bg-amber-400 transition-all">Close</button>
+            <button onClick={onClose} className="w-full bg-blue-600 py-3 text-sm font-bold text-white transition-colors hover:bg-blue-700">Close</button>
           </div>
         ) : (
-          <div className="px-6 py-4 border-t border-white/[0.06] flex justify-end gap-3 shrink-0">
-            <button onClick={onClose} className="px-5 py-2.5 rounded-xl text-slate-400 hover:text-white text-sm font-medium hover:bg-white/5 transition-colors">Cancel</button>
-            <button onClick={handleSave} disabled={saving} className={`btn-primary ${saving ? 'opacity-60 cursor-not-allowed' : ''}`}>
+          <div className="flex shrink-0 justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
+            <button onClick={onClose} className="px-5 py-2.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800">Cancel</button>
+            <button onClick={handleSave} disabled={saving} className={`inline-flex items-center gap-2 bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 ${saving ? 'cursor-not-allowed opacity-60' : ''}`}>
               {saving ? <><span className="animate-spin">⏳</span> Creating…</> : <><Check size={15} /> Save Carrier</>}
             </button>
           </div>

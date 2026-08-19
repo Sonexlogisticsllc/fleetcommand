@@ -507,6 +507,22 @@
 [data-sonex-load-modal] .text-white { color: #ffffff !important; }
 [data-sonex-load-modal] .text-slate-300 { color: #cbd5e1 !important; }
 [data-sonex-load-modal] .text-slate-400 { color: #94a3b8 !important; }
+[data-sonex-load-modal] .bg-white { background-color: #ffffff !important; }
+[data-sonex-load-modal] .bg-slate-50 { background-color: #f8fafc !important; }
+[data-sonex-load-modal] .bg-slate-900 { background-color: #0f172a !important; }
+[data-sonex-load-modal] .text-slate-900 { color: #0f172a !important; }
+[data-sonex-load-modal] .text-slate-800 { color: #1e293b !important; }
+[data-sonex-load-modal] .text-slate-700 { color: #334155 !important; }
+[data-sonex-load-modal] .text-slate-600 { color: #475569 !important; }
+[data-sonex-load-modal] .text-slate-500 { color: #64748b !important; }
+[data-portal="sonex"] [data-tms-surface] [data-sonex-load-modal] .bg-white { background-color: #ffffff !important; }
+[data-portal="sonex"] [data-tms-surface] [data-sonex-load-modal] .bg-slate-50 { background-color: #f8fafc !important; }
+[data-portal="sonex"] [data-tms-surface] [data-sonex-load-modal] .bg-slate-900 { background-color: #0f172a !important; }
+[data-portal="sonex"] [data-tms-surface] [data-sonex-load-modal] .text-slate-900 { color: #0f172a !important; }
+[data-portal="sonex"] [data-tms-surface] [data-sonex-load-modal] .text-slate-800 { color: #1e293b !important; }
+[data-portal="sonex"] [data-tms-surface] [data-sonex-load-modal] .text-slate-700 { color: #334155 !important; }
+[data-portal="sonex"] [data-tms-surface] [data-sonex-load-modal] .text-slate-600 { color: #475569 !important; }
+[data-portal="sonex"] [data-tms-surface] [data-sonex-load-modal] .text-slate-500 { color: #64748b !important; }
 [data-portal="sonex"] [data-tms-surface] [data-sonex-load-modal] .text-white { color: #ffffff !important; }
 [data-portal="sonex"] [data-tms-surface] [data-sonex-load-modal] .text-slate-300 { color: #cbd5e1 !important; }
 [data-portal="sonex"] [data-tms-surface] [data-sonex-load-modal] .text-slate-400 { color: #94a3b8 !important; }

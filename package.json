@@ -10,6 +10,7 @@
     "qa:seed:local": "node scripts/seed-local-qa.mjs",
     "qa:storage:local": "tsx scripts/qa-local-storage.ts",
     "qa:domain": "tsx scripts/qa-domain.ts",
+    "qa:dashboard": "tsx scripts/qa-dashboard-activity.ts",
     "qa:extraction": "tsx scripts/qa-document-extraction.ts",
     "start": "next start",
     "lint": "next lint"

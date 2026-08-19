@@ -7,6 +7,7 @@ import { eq, desc, and, inArray, count, sum, avg, gte } from 'drizzle-orm';
 import { hash } from '@node-rs/argon2';
 import crypto from 'crypto';
 import { getCurrentUserAction } from './authActions';
+import { buildTodayActivity } from './dashboardActivity';
 
 
 import {
@@ -1061,18 +1062,10 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   }
 }
 
-function getTodayActivityInMemory(loads: SonexLoad[]): { pickups: SonexLoad[]; deliveries: SonexLoad[] } {
-  const today = new Date().toISOString().split('T')[0];
-  return {
-    pickups: loads.filter(l => l.pickupDate === today && ['booked', 'dispatched', 'in_transit'].includes(l.status)),
-    deliveries: loads.filter(l => l.deliveryDate === today && ['in_transit'].includes(l.status)),
-  };
-}
-
 export async function getTodayActivity(): Promise<{ pickups: SonexLoad[]; deliveries: SonexLoad[] }> {
   await requireAdminUser();
   const loads = await getLoads();
-  return getTodayActivityInMemory(loads);
+  return buildTodayActivity(loads);
 }
 
 function getDashboardStatsInMemory(loads: SonexLoad[], carriers: SonexCarrier[]): DashboardStats {
@@ -1162,7 +1155,7 @@ export async function getDashboardCombinedData() {
 
     // Compute stats and today's activity purely in-memory
     const stats = getDashboardStatsInMemory(loads, carriers);
-    const activityRaw = getTodayActivityInMemory(loads);
+    const activityRaw = buildTodayActivity(loads);
 
     // Pre-map carrier name directly onto active loads
     const activity = {
