@@ -62,7 +62,7 @@ type LoadViewTab = typeof LOAD_VIEW_TABS[number]['id'];
 
 const Section = ({ title, children, cols = 2 }: { title: string; children: React.ReactNode; cols?: number }) => (
   <div>
-    <div className="text-[10px] font-semibold text-amber-400/80 uppercase tracking-wider mb-3 pb-1.5 border-b border-white/[0.06]">
+    <div className="mb-3 border-b border-slate-200 pb-2 text-[10px] font-semibold uppercase tracking-wider text-blue-700">
       {title}
     </div>
     <div className={`grid grid-cols-${cols} gap-3`}>{children}</div>
@@ -75,11 +75,15 @@ interface NewLoadModalProps {
   carriers: SonexCarrier[];
   onClose: () => void;
   onSaved: () => void;
+  onAiParse: (file: File, documentType: 'rate_confirmation' | 'bol') => Promise<boolean>;
 }
 
-function NewLoadModal({ carriers, onClose, onSaved }: NewLoadModalProps) {
+function NewLoadModal({ carriers, onClose, onSaved, onAiParse }: NewLoadModalProps) {
   const rateConRef = useRef<HTMLInputElement>(null);
-  const [creationMode, setCreationMode] = useState<'upload' | 'manual'>('manual');
+  const aiFileRef = useRef<HTMLInputElement>(null);
+  const [creationMode, setCreationMode] = useState<'ai' | 'manual'>('ai');
+  const [aiDocumentType, setAiDocumentType] = useState<'rate_confirmation' | 'bol'>('rate_confirmation');
+  const [aiParsing, setAiParsing] = useState(false);
   const [rateConFile, setRateConFile] = useState<File | null>(null);
   const [form, setForm] = useState({
     carrierId: '',
@@ -129,53 +133,69 @@ function NewLoadModal({ carriers, onClose, onSaved }: NewLoadModalProps) {
 
   const input = (label: string, key: string, type = 'text', placeholder = '', required = false) => (
     <div>
-      <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-        {label}{required && <span className="text-amber-500 ml-0.5">*</span>}
+      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+        {label}{required && <span className="ml-0.5 text-rose-500">*</span>}
       </label>
       <input
         type={type}
         value={(form as any)[key]}
         onChange={e => set(key, type === 'number' ? Number(e.target.value) : e.target.value)}
         placeholder={placeholder}
-        className="input-primary text-sm py-2"
+        className="h-10 w-full border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
       />
     </div>
   );
 
+  const handleAiFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setAiParsing(true);
+    const succeeded = await onAiParse(file, aiDocumentType);
+    setAiParsing(false);
+    if (succeeded) onClose();
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative w-full max-w-[650px] h-full flex flex-col transition-none"
-        style={{ background: '#080B14', borderLeft: '1px solid rgba(245,158,11,0.15)' }}>
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06] shrink-0">
-          <h3 className="text-base font-bold text-white flex items-center gap-2">
-            <Plus size={16} className="text-amber-400" /> Create New Order
-          </h3>
-          <button onClick={onClose} className="p-2 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors">
+      <div className="relative flex h-full w-full max-w-[700px] flex-col border-l border-slate-200 bg-[#f7f9fc] shadow-2xl">
+        <div className="flex shrink-0 items-start justify-between border-b border-slate-200 bg-white px-6 py-5">
+          <div>
+            <div className="flex items-center gap-2"><span className="inline-flex size-7 items-center justify-center bg-blue-600 text-white"><Plus size={16} /></span><h3 className="text-lg font-bold text-slate-950">New Load</h3></div>
+            <p className="mt-1 text-xs text-slate-500">Create from a broker document or enter the load manually.</p>
+          </div>
+          <button onClick={onClose} className="p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700" title="Close new load">
             <X size={18} />
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-1 border-b border-white/[0.06] px-6 py-3">
+        <div className="grid shrink-0 grid-cols-2 gap-1 border-b border-slate-200 bg-white px-6 pb-4">
           {([
-            ['upload', 'Upload rate confirmation'],
+            ['ai', 'AI parse document'],
             ['manual', 'Manual entry'],
-          ] as const).map(([id, label]) => <button key={id} onClick={() => { setCreationMode(id); if (id === 'upload') rateConRef.current?.click(); }} className={`px-2 py-2 text-[11px] font-semibold ${creationMode === id ? 'bg-violet-700 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>{label}</button>)}
-          <input ref={rateConRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={event => { const file = event.target.files?.[0] ?? null; setRateConFile(file); if (file) toast.success(`${file.name} attached for review`); event.target.value = ''; }} />
+          ] as const).map(([id, label]) => <button key={id} onClick={() => setCreationMode(id)} className={`h-10 border text-xs font-semibold transition-colors ${creationMode === id ? 'border-blue-600 bg-blue-600 text-white shadow-sm' : 'border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-700'}`}>{label}</button>)}
+          <input ref={aiFileRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={handleAiFile} />
+          <input ref={rateConRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={event => { const file = event.target.files?.[0] ?? null; setRateConFile(file); if (file) toast.success(`${file.name} attached for this manual load`); event.target.value = ''; }} />
         </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-          {/* Carrier Assignment Select */}
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          {creationMode === 'ai' ? (
+            <div className="mx-auto max-w-xl space-y-5 py-4">
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-4"><p className="text-sm font-semibold text-slate-900">Create a load from paperwork</p><p className="mt-1 text-xs leading-5 text-slate-600">Upload a rate confirmation or BOL. Sonex extracts the load fields into an editable review screen before anything is saved.</p></div>
+              <div className="grid grid-cols-2 gap-2"><button type="button" onClick={() => setAiDocumentType('rate_confirmation')} className={`border p-3 text-left ${aiDocumentType === 'rate_confirmation' ? 'border-violet-600 bg-violet-50 ring-1 ring-violet-600' : 'border-slate-200 bg-white hover:border-violet-300'}`}><p className="text-xs font-semibold text-slate-900">Rate confirmation</p><p className="mt-1 text-[11px] text-slate-500">Broker tender or rate con</p></button><button type="button" onClick={() => setAiDocumentType('bol')} className={`border p-3 text-left ${aiDocumentType === 'bol' ? 'border-violet-600 bg-violet-50 ring-1 ring-violet-600' : 'border-slate-200 bg-white hover:border-violet-300'}`}><p className="text-xs font-semibold text-slate-900">Bill of lading</p><p className="mt-1 text-[11px] text-slate-500">Shipment or BOL paperwork</p></button></div>
+              <button type="button" disabled={aiParsing} onClick={() => aiFileRef.current?.click()} className="flex min-h-56 w-full flex-col items-center justify-center border-2 border-dashed border-blue-200 bg-white px-6 text-center transition-colors hover:border-blue-500 hover:bg-blue-50 disabled:cursor-wait disabled:opacity-60"><span className="mb-3 inline-flex size-11 items-center justify-center rounded-full bg-blue-100 text-blue-700">{aiParsing ? <Loader2 className="animate-spin" size={20} /> : <Sparkles size={20} />}</span><span className="text-sm font-semibold text-slate-900">{aiParsing ? 'Reading document...' : 'Choose a document to parse'}</span><span className="mt-1 text-xs text-slate-500">PDF, JPG, PNG, or WEBP up to 15 MB</span><span className="mt-4 border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700">Select file</span></button>
+              <p className="text-center text-[11px] text-slate-500">You will review and edit every extracted field before the load is created.</p>
+            </div>
+          ) : (<div className="space-y-5">
           <div>
-            <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+            <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
               Carrier Assignment
             </label>
             <select
               value={form.carrierId}
               onChange={e => set('carrierId', e.target.value)}
-              className="input-primary text-sm py-2"
+              className="h-10 w-full border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             >
               <option value="">Select carrier</option>
               {carriers.filter(c => c.status === 'active').map(c => (
@@ -186,8 +206,8 @@ function NewLoadModal({ carriers, onClose, onSaved }: NewLoadModalProps) {
             </select>
           </div>
 
-          <div className="border border-dashed border-slate-700 bg-slate-950 p-4">
-            <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold text-slate-200">Rate confirmation <span className="font-normal text-slate-500">(optional)</span></p><p className="mt-1 text-[10px] text-slate-500">Attach the broker PDF or image to this load.</p></div><button type="button" onClick={() => rateConRef.current?.click()} className="inline-flex items-center gap-1.5 border border-slate-700 px-3 py-2 text-[10px] font-semibold text-slate-200 hover:border-blue-500"><UploadCloud size={13} /> Choose file</button></div>{rateConFile && <p className="mt-2 truncate text-[10px] text-emerald-400">{rateConFile.name}</p>}
+          <div className="border border-dashed border-slate-300 bg-white p-4">
+            <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold text-slate-800">Source document <span className="font-normal text-slate-500">(optional)</span></p><p className="mt-1 text-[10px] text-slate-500">Attach paperwork without parsing it.</p></div><button type="button" onClick={() => rateConRef.current?.click()} className="inline-flex items-center gap-1.5 border border-slate-300 bg-white px-3 py-2 text-[10px] font-semibold text-slate-700 hover:border-blue-500 hover:text-blue-700"><UploadCloud size={13} /> Choose file</button></div>{rateConFile && <p className="mt-2 truncate text-[10px] text-emerald-600">{rateConFile.name}</p>}
           </div>
 
           <Section title="Broker Information" cols={2}>
@@ -258,20 +278,20 @@ function NewLoadModal({ carriers, onClose, onSaved }: NewLoadModalProps) {
               value={form.notes}
               onChange={e => set('notes', e.target.value)}
               rows={3}
-              className="input-primary text-sm py-2 resize-none"
+              className="w-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 resize-none"
               placeholder="Any special instructions or notes about this load…"
             />
           </div>
+          </div>)}
         </div>
 
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-white/[0.06] flex justify-end gap-3 shrink-0">
-          <button onClick={onClose} className="px-5 py-2.5 rounded-xl text-slate-400 hover:text-white text-sm font-medium hover:bg-white/5 transition-colors">
+        <div className="flex shrink-0 justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
+          <button onClick={onClose} className="px-5 py-2.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800">
             Cancel
           </button>
-          <button onClick={handleSave} className="btn-primary" style={{ background: '#F59E0B', color: '#000' }}>
+          {creationMode === 'manual' && <button onClick={handleSave} className="inline-flex items-center gap-2 bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700">
             <Check size={15} /> Create Load
-          </button>
+          </button>}
         </div>
       </div>
     </div>
@@ -295,14 +315,10 @@ export default function LoadsPage() {
   const [carrierFilter, setCarrierFilter] = useState('all');
   const [loadViewTab, setLoadViewTab] = useState<LoadViewTab>('all');
   
-  // Modals & Scan state
+  // Modals and parser review state
   const [showNew, setShowNew] = useState(false);
-  const [scanning, setScanning] = useState(false);
-  const [scanStep, setScanStep] = useState('');
-  const [parseDocumentType, setParseDocumentType] = useState<'rate_confirmation' | 'bol'>('rate_confirmation');
   const [parsedPreview, setParsedPreview] = useState<ParsedPreview | null>(null);
   const [parsedCarrierId, setParsedCarrierId] = useState('');
-  const aiFileRef = useRef<HTMLInputElement>(null);
 
   // Dynamic quick-assign load selections for carriers
   const [quickAssignLoads, setQuickAssignLoads] = useState<Record<string, string>>({});
@@ -407,43 +423,34 @@ export default function LoadsPage() {
     }
   };
 
-  // AI Parse Rate Confirmation from Dispatch Board
-  const handleAiUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 4 * 1024 * 1024) {
-      toast.error('Parser files must be 4 MB or smaller. The original can still be uploaded in load paperwork.');
-      e.target.value = '';
-      return;
+  const parseAiFile = async (file: File, documentType: 'rate_confirmation' | 'bol'): Promise<boolean> => {
+    if (file.size > 15 * 1024 * 1024) {
+      toast.error('Parser files must be 15 MB or smaller.');
+      return false;
     }
-
-    setScanning(true);
-    setScanStep('Scanning Rate Confirmation PDF...');
-    await new Promise(r => setTimeout(r, 700));
-    setScanStep('Extracting freight route and rate...');
-    await new Promise(r => setTimeout(r, 700));
-
     try {
       const fd = new FormData();
       fd.append('file', file);
-      fd.append('documentType', parseDocumentType);
+      fd.append('documentType', documentType);
       const res = await fetch('/api/parse-rc', {
         method: 'POST',
         body: fd
       });
-      const json = await res.json();
-      if (json.success) {
-        setParsedPreview(json.data as ParsedPreview);
-        toast.success('Document parsed. Review the structured fields before saving.');
-      } else {
-        toast.error(json.error || 'Failed to parse rate confirmation');
+      const payload = await res.text();
+      let json: { success?: boolean; error?: string; data?: ParsedPreview } | null = null;
+      try {
+        json = JSON.parse(payload) as { success?: boolean; error?: string; data?: ParsedPreview };
+      } catch {
+        throw new Error(`Document parser returned an invalid response (${res.status}).`);
       }
+      if (!res.ok || !json.success || !json.data) throw new Error(json.error || `Document parser failed (${res.status}).`);
+      setParsedPreview(json.data);
+      toast.success('Document parsed. Review the structured fields before saving.');
+      return true;
     } catch (err) {
       console.error(err);
-      toast.error('Error connecting to document parser');
-    } finally {
-      setScanning(false);
-      if (aiFileRef.current) aiFileRef.current.value = '';
+      toast.error(err instanceof Error ? err.message : 'Document parser could not be reached.');
+      return false;
     }
   };
 
@@ -508,36 +515,14 @@ export default function LoadsPage() {
           <p className="text-slate-500 text-xs">Plan, assign, track, and settle every load from one workspace.</p>
         </div>
          <div className="flex items-center gap-2">
-           <select value={parseDocumentType} onChange={event => setParseDocumentType(event.target.value as 'rate_confirmation' | 'bol')} className="border border-slate-200 bg-white px-2 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-700 outline-none focus:border-blue-500">
-             <option value="rate_confirmation">Rate confirmation</option>
-             <option value="bol">BOL</option>
-           </select>
-           <button
-            onClick={() => aiFileRef.current?.click()}
-            disabled={scanning}
-            className="flex items-center gap-2 border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-bold uppercase text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-50"
-          >
-            {scanning ? (
-              <>
-                <Loader2 className="animate-spin" size={13} />
-                Scanning RC...
-              </>
-            ) : (
-              <>
-                <Sparkles size={13} />
-                AI Parse Rate Con
-              </>
-            )}
-          </button>
           <button
             onClick={() => setShowNew(true)}
-            className="flex items-center gap-2 bg-blue-600 px-4 py-2.5 text-xs font-bold uppercase text-white transition-colors hover:bg-blue-700"
+            className="flex items-center gap-2 bg-blue-600 px-4 py-2.5 text-xs font-bold uppercase text-white shadow-sm transition-colors hover:bg-blue-700"
           >
-            <Plus size={14} /> New Manual Order
+            <Plus size={14} /> New Load
           </button>
         </div>
       </div>
-      <input ref={aiFileRef} type="file" className="hidden" accept="image/*,application/pdf" onChange={handleAiUpload} />
       {parsedPreview && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <button aria-label="Close extraction preview" onClick={() => setParsedPreview(null)} className="absolute inset-0 bg-slate-950/70" />
@@ -717,10 +702,10 @@ export default function LoadsPage() {
 
       {/* BOARD VIEW 2: UNASSIGNED ORDER QUEUE */}
       {activeBoardTab === 'unassigned' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="space-y-3">
           
           {/* Queue List */}
-          <div className="lg:col-span-2 space-y-3">
+          <div className="space-y-3">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Unassigned Loads Pipeline</h3>
             {unassignedLoads.length === 0 ? (
               <div className="glass-card p-10 text-center space-y-2">
@@ -802,47 +787,6 @@ export default function LoadsPage() {
                 ))}
               </div>
             )}
-          </div>
-
-          {/* AI Drag-and-drop OCR Parser Sidebar */}
-          <div className="space-y-4">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Rate Confirmation Extraction</h3>
-            <div 
-              onClick={() => aiFileRef.current?.click()}
-              className="border border-dashed border-white/10 rounded-2xl p-8 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-white/[0.02] hover:border-amber-500/30 transition-all space-y-4"
-            >
-              {scanning ? (
-                <div className="space-y-2 py-4">
-                  <Loader2 className="animate-spin text-amber-500 mx-auto" size={24} />
-                  <p className="text-xs font-bold text-white">{scanStep}</p>
-                </div>
-              ) : (
-                <>
-                  <div className="w-12 h-12 rounded-full bg-white/[0.03] flex items-center justify-center">
-                    <UploadCloud size={20} className="text-slate-400" />
-                  </div>
-                  <div>
-                    <p className="text-white text-xs font-bold">Import Rate Confirmation</p>
-                    <p className="text-slate-500 text-[10px] mt-1">Upload broker order PDF or image for instant automated load creation</p>
-                  </div>
-                  <span className="text-[9px] text-amber-500/80 bg-amber-500/10 px-3 py-1 rounded-full font-bold tracking-wider uppercase border border-amber-500/10">
-                    Parse Document
-                  </span>
-                </>
-              )}
-            </div>
-            <div className="rounded-2xl border border-white/[0.05] bg-[#0E1524]/60 p-4 space-y-2.5 text-xs">
-              <div className="flex items-center gap-2 border-b border-white/5 pb-2">
-                <FileText size={13} className="text-amber-500" />
-                <span className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">DT Automations Guide</span>
-              </div>
-              <p className="text-slate-500 text-[10px] leading-relaxed">
-                When you drag and drop a Rate Confirmation document:
-                <br />1. Sonex extraction reads route stops, pickup dates, broker contacts, commodity descriptions, and rate payouts.
-                <br />2. The load is created in under 15 seconds and appended to the <strong>Unassigned Queue</strong>.
-                <br />3. Assign it to any available carrier immediately using the dropdown selector.
-              </p>
-            </div>
           </div>
 
         </div>
@@ -986,7 +930,7 @@ export default function LoadsPage() {
 
       {/* Modal */}
       {showNew && (
-        <NewLoadModal carriers={carriers} onClose={closeNewLoad} onSaved={reloadData} />
+        <NewLoadModal carriers={carriers} onClose={closeNewLoad} onSaved={reloadData} onAiParse={parseAiFile} />
       )}
     </div>
   );

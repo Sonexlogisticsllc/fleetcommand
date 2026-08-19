@@ -23,7 +23,9 @@ export async function POST(req: Request) {
 
     const formData = await req.formData();
     const file = formData.get('file');
-    if (!(file instanceof File)) return NextResponse.json({ success: false, error: 'No document uploaded.' }, { status: 400 });
+    if (!file || typeof file === 'string' || typeof file.arrayBuffer !== 'function') {
+      return NextResponse.json({ success: false, error: 'No document uploaded.' }, { status: 400 });
+    }
     if (file.size > MAX_DOCUMENT_EXTRACTION_BYTES) {
       return NextResponse.json({ success: false, error: 'Parser files must be 15 MB or smaller.' }, { status: 413 });
     }

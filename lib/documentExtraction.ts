@@ -1,4 +1,3 @@
-import { v1 } from '@google-cloud/documentai';
 import { PDFParse } from 'pdf-parse';
 
 export const MAX_DOCUMENT_EXTRACTION_BYTES = 15 * 1024 * 1024;
@@ -96,8 +95,14 @@ function normalizeFieldName(value: string) {
 }
 
 function parseStop(text: string, stop: 'pickup' | 'delivery') {
-  const value = capture(text, new RegExp(`^${stop}(?: location| facility)?\\s*[:#-]?\\s*(.+)$`, 'im'));
-  const location = value.match(/^(.*?)\s+-\s+(.+?),\s*([A-Z]{2})\s+(\d{5}(?:-\d{4})?)$/i);
+  const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const valueIndex = lines.findIndex(line => new RegExp(`^${stop}(?: location| facility)?[ \\t:#-]+(?!date\\b|appointment\\b)(.+)$`, 'i').test(line));
+  const value = valueIndex >= 0
+    ? lines[valueIndex].replace(new RegExp(`^${stop}(?: location| facility)?[ \\t:#-]+`, 'i'), '').trim()
+    : '';
+  const nextLocationLine = lines[valueIndex + 1] ?? '';
+  const continuation = /^(?:[A-Z]{2}\s+)?\d{5}(?:-\d{4})?$/i.test(nextLocationLine) ? ` ${nextLocationLine}` : '';
+  const location = `${value}${continuation}`.match(/^(.*?)\s+-\s+(.+?),\s*([A-Z]{2})\s+(\d{5}(?:-\d{4})?)$/i);
   return { facility: location?.[1]?.trim() ?? value, city: location?.[2]?.trim() ?? '', state: location?.[3]?.toUpperCase() ?? '', zip: location?.[4] ?? '' };
 }
 
@@ -161,10 +166,10 @@ export async function parseLocalTextDocument(buffer: Buffer, contentType: string
     brokerMC: capture(text, /^(?:broker\s+)?mc(?: number| no\.?)?\s*[:#-]?\s*([a-z0-9-]+)$/im),
     pickupFacility: pickup.facility, pickupCity: pickup.city, pickupState: pickup.state, pickupZip: pickup.zip, pickupDate: normalizeDate(pickupDateRaw), pickupTime: normalizeTime(pickupDateRaw),
     deliveryFacility: delivery.facility, deliveryCity: delivery.city, deliveryState: delivery.state, deliveryZip: delivery.zip, deliveryDate: normalizeDate(deliveryDateRaw), deliveryTime: normalizeTime(deliveryDateRaw),
-    commodity: capture(text, /^commodity\s*[:#-]?\s*(.+)$/im),
-    weight: parseAmount(capture(text, /^weight\s*[:#-]?\s*([\d,.]+)/im)),
+    commodity: capture(text, /\bcommodity\s*[:#-]?\s*(.+?)(?=\s+weight\b|$)/im),
+    weight: parseAmount(capture(text, /\bweight\s*[:#-]?\s*([\d,.]+)/im)),
     miles: parseAmount(capture(text, /^(?:miles|distance)\s*[:#-]?\s*([\d,.]+)/im)),
-    rate: parseAmount(capture(text, /^(?:line haul|carrier pay|total rate|rate|amount)\s*[:#-]?\s*(\$?[\d,.]+)/im)),
+    rate: parseAmount(capture(text, /\b(?:line haul|carrier pay|total rate|rate|amount)\s*[:#-]?\s*(\$?[\d,.]+)/im)),
     fieldConfidence: {},
   };
   for (const [field, value] of Object.entries(data)) {
@@ -195,6 +200,9 @@ export async function parseGoogleDocumentAi(buffer: Buffer, contentType: string,
   } catch {
     throw new Error('GOOGLE_DOCUMENT_AI_SERVICE_ACCOUNT_JSON is not valid JSON.');
   }
+  // Keep the optional cloud SDK out of the local/fallback request path. This
+  // prevents a missing or invalid cloud configuration from breaking PDF text review.
+  const { v1 } = await import('@google-cloud/documentai');
   const client = new v1.DocumentProcessorServiceClient({ projectId: config.projectId, credentials, apiEndpoint: `${config.location}-documentai.googleapis.com`, fallback: true });
   const processorName = config.processorVersion
     ? `projects/${config.projectId}/locations/${config.location}/processors/${config.processorId}/processorVersions/${config.processorVersion}`
