@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download, FilePlus2, Loader2, Plus, ReceiptText, RefreshCw } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import toast from 'react-hot-toast';
@@ -88,6 +88,22 @@ function isoDate(value: Date) {
   return value.getFullYear() + '-' + String(value.getMonth() + 1).padStart(2, '0') + '-' + String(value.getDate()).padStart(2, '0');
 }
 
+function completedDeliveryDate(load: SonexLoad) {
+  return load.deliveryDate;
+}
+
+function weekRangeFor(dateValue: string) {
+  const start = mondayOf(new Date(dateValue + 'T12:00:00'));
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  return { start: isoDate(start), end: isoDate(end) };
+}
+
+function isCompletedInPeriod(load: SonexLoad, from: string, to: string) {
+  const completionDate = completedDeliveryDate(load);
+  return eligibleStatuses.has(load.status) && completionDate >= from && completionDate <= to;
+}
+
 function FinancialReportingOverview({ loads, isMcOwner }: { loads: SonexLoad[]; isMcOwner: boolean }) {
   const completedLoads = useMemo(() => loads.filter(load => eligibleStatuses.has(load.status)), [loads]);
   const totalGross = useMemo(() => completedLoads.reduce((total, load) => total + load.rate, 0), [completedLoads]);
@@ -98,13 +114,13 @@ function FinancialReportingOverview({ loads, isMcOwner }: { loads: SonexLoad[]; 
   const totalMiles = useMemo(() => completedLoads.reduce((total, load) => total + load.miles, 0), [completedLoads]);
   const avgRpm = totalMiles ? totalGross / totalMiles : 0;
   const weeklyRows = useMemo(() => {
-    const anchor = completedLoads.reduce((latest, load) => load.pickupDate > latest ? load.pickupDate : latest, new Date().toISOString().slice(0, 10));
+    const anchor = completedLoads.reduce((latest, load) => completedDeliveryDate(load) > latest ? completedDeliveryDate(load) : latest, new Date().toISOString().slice(0, 10));
     const end = new Date(`${anchor}T12:00:00`);
     return Array.from({ length: 8 }, (_, index) => {
       const day = new Date(end); day.setDate(day.getDate() - (7 - index) * 7);
       const from = new Date(day); from.setDate(day.getDate() - 6);
       const group = completedLoads.filter(load => {
-        const date = new Date(`${load.pickupDate}T12:00:00`);
+        const date = new Date(`${completedDeliveryDate(load)}T12:00:00`);
         return date >= from && date <= day;
       });
       return { week: from.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), gross: group.reduce((sum, load) => sum + load.rate, 0), net: group.reduce((sum, load) => sum + (isMcOwner ? load.mcOwnerFeeAmount : load.carrierNet), 0) };
@@ -150,6 +166,7 @@ export default function AccountingPage() {
     return isoDate(end);
   });
   const [invoiceWeek, setInvoiceWeek] = useState(() => isoDate(mondayOf(new Date())));
+  const hasInitializedAccountingPeriod = useRef(false);
   const [expenseForm, setExpenseForm] = useState({
     loadId: '',
     category: 'Lumper fee',
@@ -175,6 +192,22 @@ export default function AccountingPage() {
     reload();
   }, [reload]);
 
+  useEffect(() => {
+    if (!data || hasInitializedAccountingPeriod.current) return;
+    const latestCompletedLoad = (data.loads ?? [])
+      .filter(load => eligibleStatuses.has(load.status))
+      .sort((left, right) => completedDeliveryDate(right).localeCompare(completedDeliveryDate(left)))[0];
+
+    if (latestCompletedLoad) {
+      const period = weekRangeFor(completedDeliveryDate(latestCompletedLoad));
+      setInvoiceWeek(period.start);
+      setSettlementFrom(period.start);
+      setSettlementTo(period.end);
+      setSettlementCarrierId(latestCompletedLoad.carrierId);
+    }
+    hasInitializedAccountingPeriod.current = true;
+  }, [data]);
+
   const loadsById = useMemo(() => new Map((data?.loads ?? []).map(load => [load.id, load])), [data]);
   const carrierNames = useMemo(
     () => new Map((data?.carriers ?? []).map(carrier => [carrier.id, carrier.firstName + ' ' + carrier.lastName])),
@@ -193,6 +226,26 @@ export default function AccountingPage() {
     () => (data?.loads ?? []).filter(load => eligibleStatuses.has(load.status) && !invoiceLoadIds.has(load.id)),
     [data, invoiceLoadIds],
   );
+  const settlementLoads = useMemo(
+    () => (data?.loads ?? []).filter(load => load.carrierId === settlementCarrierId && isCompletedInPeriod(load, settlementFrom, settlementTo)),
+    [data, settlementCarrierId, settlementFrom, settlementTo],
+  );
+  const weeklyCompletedLoads = useMemo(() => {
+    const period = weekRangeFor(invoiceWeek);
+    return (data?.loads ?? []).filter(load => isCompletedInPeriod(load, period.start, period.end));
+  }, [data, invoiceWeek]);
+
+  const selectSettlementCarrier = (carrierId: string) => {
+    setSettlementCarrierId(carrierId);
+    const latestCarrierLoad = (data?.loads ?? [])
+      .filter(load => load.carrierId === carrierId && eligibleStatuses.has(load.status))
+      .sort((left, right) => completedDeliveryDate(right).localeCompare(completedDeliveryDate(left)))[0];
+    if (latestCarrierLoad) {
+      const period = weekRangeFor(completedDeliveryDate(latestCarrierLoad));
+      setSettlementFrom(period.start);
+      setSettlementTo(period.end);
+    }
+  };
 
   const createInvoice = async (loadId: string) => {
     setBusyId('invoice-' + loadId);
@@ -249,11 +302,9 @@ export default function AccountingPage() {
   };
 
   const generateWeeklyInvoicePdf = async () => {
-    const start = mondayOf(new Date(invoiceWeek + 'T12:00:00'));
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    end.setHours(23, 59, 59, 999);
-    const weeklyLoads = (data?.loads ?? []).filter(load => eligibleStatuses.has(load.status) && new Date(load.deliveryDate + 'T12:00:00') >= start && new Date(load.deliveryDate + 'T12:00:00') <= end);
+    const { start: weekStart } = weekRangeFor(invoiceWeek);
+    const start = new Date(weekStart + 'T12:00:00');
+    const weeklyLoads = weeklyCompletedLoads;
     if (!weeklyLoads.length) {
       toast.error('No completed loads in this dispatch week.');
       return;
@@ -299,7 +350,6 @@ export default function AccountingPage() {
 
   const generateSettlementPdf = async () => {
     const carrier = (data?.carriers ?? []).find(item => item.id === settlementCarrierId);
-    const settlementLoads = (data?.loads ?? []).filter(load => load.carrierId === settlementCarrierId && eligibleStatuses.has(load.status) && load.pickupDate >= settlementFrom && load.pickupDate <= settlementTo);
     if (!carrier || !settlementFrom || !settlementTo) {
       toast.error('Choose a carrier and settlement period.');
       return;
@@ -333,8 +383,8 @@ export default function AccountingPage() {
       doc.text('Period: ' + dateLabel(settlementFrom) + ' to ' + dateLabel(settlementTo), 40, 122);
       autoTable(doc, {
         startY: 142,
-        head: [['Load', 'Pickup date', 'Route', 'Gross rate', 'Total fee', 'Carrier net', 'Driver pay']],
-        body: settlementLoads.map(load => [load.loadNumber, dateLabel(load.pickupDate), load.pickupState + ' to ' + load.deliveryState, money(load.rate), money(load.totalFeeAmount), money(load.carrierNet), money(driverPayForLoad(load))]),
+        head: [['Load', 'Delivery date', 'Route', 'Gross rate', 'Total fee', 'Carrier net', 'Driver pay']],
+        body: settlementLoads.map(load => [load.loadNumber, dateLabel(completedDeliveryDate(load)), load.pickupState + ' to ' + load.deliveryState, money(load.rate), money(load.totalFeeAmount), money(load.carrierNet), money(driverPayForLoad(load))]),
         foot: [['', '', 'Totals', money(grossTotal), money(feeTotal), money(netTotal), money(driverPayTotal)]],
         headStyles: { fillColor: [30, 64, 175], textColor: [255, 255, 255], fontSize: 8.5 },
         footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' },
@@ -463,8 +513,8 @@ export default function AccountingPage() {
         </section>
 
         <div className="grid gap-5 xl:grid-cols-2">
-          <section className="border border-slate-200 bg-white"><div className="border-b border-slate-200 px-4 py-3"><h2 className="text-sm font-semibold text-slate-900">Weekly dispatch fee invoice</h2><p className="mt-0.5 text-xs text-slate-500">Generate a PDF across all completed deliveries in the selected dispatch week.</p></div><div className="flex flex-wrap items-end gap-3 p-4"><label className="min-w-[180px] flex-1 text-[11px] font-medium text-slate-600">Week starting<input type="date" value={invoiceWeek} onChange={event => setInvoiceWeek(event.target.value)} className="mt-1 block w-full border border-slate-200 px-3 py-2 text-xs font-normal text-slate-700 outline-none focus:border-blue-500" /></label><button onClick={generateWeeklyInvoicePdf} disabled={busyId === 'weekly-pdf'} className="inline-flex items-center gap-2 bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50">{busyId === 'weekly-pdf' ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}Download PDF</button></div></section>
-          <section className="border border-slate-200 bg-white"><div className="border-b border-slate-200 px-4 py-3"><h2 className="text-sm font-semibold text-slate-900">Carrier settlement PDF</h2><p className="mt-0.5 text-xs text-slate-500">Record the settlement and download its carrier-facing statement.</p></div><div className="grid gap-3 p-4 sm:grid-cols-2"><select value={settlementCarrierId} onChange={event => setSettlementCarrierId(event.target.value)} className="border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 outline-none focus:border-blue-500 sm:col-span-2"><option value="">Select carrier</option>{(data?.carriers ?? []).map(carrier => <option key={carrier.id} value={carrier.id}>{carrier.firstName} {carrier.lastName}</option>)}</select><label className="text-[11px] font-medium text-slate-600">From<input type="date" value={settlementFrom} onChange={event => setSettlementFrom(event.target.value)} className="mt-1 block w-full border border-slate-200 px-3 py-2 text-xs font-normal text-slate-700 outline-none focus:border-blue-500" /></label><label className="text-[11px] font-medium text-slate-600">To<input type="date" value={settlementTo} onChange={event => setSettlementTo(event.target.value)} className="mt-1 block w-full border border-slate-200 px-3 py-2 text-xs font-normal text-slate-700 outline-none focus:border-blue-500" /></label><button onClick={generateSettlementPdf} disabled={busyId === 'settlement-pdf'} className="inline-flex items-center justify-center gap-2 bg-blue-700 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-50 sm:col-span-2">{busyId === 'settlement-pdf' ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}Record & download settlement</button></div></section>
+          <section className="border border-slate-200 bg-white"><div className="border-b border-slate-200 px-4 py-3"><h2 className="text-sm font-semibold text-slate-900">Weekly dispatch fee invoice</h2><p className="mt-0.5 text-xs text-slate-500">Generate a PDF across completed deliveries in the selected delivery week.</p></div><div className="flex flex-wrap items-end gap-3 p-4"><label className="min-w-[180px] flex-1 text-[11px] font-medium text-slate-600">Week starting<input type="date" value={invoiceWeek} onChange={event => setInvoiceWeek(event.target.value)} className="mt-1 block w-full border border-slate-200 px-3 py-2 text-xs font-normal text-slate-700 outline-none focus:border-blue-500" /></label><div className="text-[11px] text-slate-500"><span className="font-semibold text-slate-700">{weeklyCompletedLoads.length}</span> completed {weeklyCompletedLoads.length === 1 ? 'delivery' : 'deliveries'} in this week</div><button onClick={generateWeeklyInvoicePdf} disabled={busyId === 'weekly-pdf'} className="inline-flex items-center gap-2 bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50">{busyId === 'weekly-pdf' ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}Download PDF</button></div></section>
+          <section className="border border-slate-200 bg-white"><div className="border-b border-slate-200 px-4 py-3"><h2 className="text-sm font-semibold text-slate-900">Carrier settlement PDF</h2><p className="mt-0.5 text-xs text-slate-500">Record the settlement from completed deliveries in the selected delivery period.</p></div><div className="grid gap-3 p-4 sm:grid-cols-2"><select value={settlementCarrierId} onChange={event => selectSettlementCarrier(event.target.value)} className="border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 outline-none focus:border-blue-500 sm:col-span-2"><option value="">Select carrier</option>{(data?.carriers ?? []).map(carrier => <option key={carrier.id} value={carrier.id}>{carrier.firstName} {carrier.lastName}</option>)}</select><label className="text-[11px] font-medium text-slate-600">From<input type="date" value={settlementFrom} onChange={event => setSettlementFrom(event.target.value)} className="mt-1 block w-full border border-slate-200 px-3 py-2 text-xs font-normal text-slate-700 outline-none focus:border-blue-500" /></label><label className="text-[11px] font-medium text-slate-600">To<input type="date" value={settlementTo} onChange={event => setSettlementTo(event.target.value)} className="mt-1 block w-full border border-slate-200 px-3 py-2 text-xs font-normal text-slate-700 outline-none focus:border-blue-500" /></label><p className="text-[11px] text-slate-500 sm:col-span-2"><span className="font-semibold text-slate-700">{settlementLoads.length}</span> completed {settlementLoads.length === 1 ? 'delivery' : 'deliveries'} for this carrier and period.</p><button onClick={generateSettlementPdf} disabled={busyId === 'settlement-pdf' || !settlementLoads.length} className="inline-flex items-center justify-center gap-2 bg-blue-700 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50 sm:col-span-2">{busyId === 'settlement-pdf' ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}Record & download settlement</button></div></section>
         </div>
       </main>
     </div>
