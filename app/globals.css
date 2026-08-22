@@ -496,6 +496,16 @@
   background: #f0f9ff !important;
   color: #0f172a !important;
 }
+/* Legacy dark-surface utilities predate the light dispatcher workspace. Keep
+   ordinary table hover states light in both admin and MC-owner views. */
+[data-portal="sonex"] [data-tms-surface] .hover\:bg-slate-50:hover {
+  background-color: #f8fafc !important;
+  color: #1e293b !important;
+}
+[data-portal="sonex"] [data-tms-surface] .hover\:bg-sky-50:hover {
+  background-color: #f0f9ff !important;
+  color: #1e293b !important;
+}
 [data-sonex-load-workspace] {
   background: #f2f5f9 !important;
   color: #1e293b !important;
