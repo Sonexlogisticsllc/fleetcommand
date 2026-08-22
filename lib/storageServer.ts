@@ -96,12 +96,13 @@ export async function authorizeUpload(bucket: string, safePrefix: string) {
   if (!user) throw new Error('Your session has expired. Please sign in again.');
 
   const [load] = await db
-    .select({ carrierId: loads.carrierId })
+    .select({ carrierId: loads.carrierId, mcOwnerId: loads.mcOwnerId })
     .from(loads)
     .where(eq(loads.id, loadId))
     .limit(1);
   if (!load) throw new Error('This load no longer exists. Refresh the page and try again.');
   if (user.role === 'admin') return;
+  if (user.role === 'mc_owner' && user.mcOwnerId && user.mcOwnerId === load.mcOwnerId) return;
   if (user.role !== 'carrier' || user.carrierId !== load.carrierId) {
     throw new Error('You do not have permission to upload paperwork for this load.');
   }

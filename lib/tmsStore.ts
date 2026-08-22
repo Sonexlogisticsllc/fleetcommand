@@ -18,11 +18,25 @@ export type OperationalTaskInput = {
   notes?: string;
 };
 
-async function requireAdmin() {
+async function requireWorkspace() {
   const user = await getCurrentUserAction();
-  if (!user || user.role !== 'admin') {
-    throw new Error('Dispatcher access is required.');
+  if (!user || (user.role !== 'admin' && user.role !== 'mc_owner')) {
+    throw new Error('Dispatcher or MC owner access is required.');
   }
+  return user;
+}
+
+async function requireAdmin() {
+  const user = await requireWorkspace();
+  if (user.role !== 'admin') throw new Error('Dispatcher access is required.');
+  return user;
+}
+
+async function requireScopedLoad(loadId: string) {
+  await requireWorkspace();
+  const load = (await getLoads()).find(item => item.id === loadId);
+  if (!load) throw new Error('You do not have permission to access this load.');
+  return load;
 }
 
 export async function getPlanningBoardData() {
@@ -188,23 +202,26 @@ export async function updateEquipmentStatus(equipmentId: string, status: 'active
 }
 
 export async function getAccountingWorkspaceData() {
-  await requireAdmin();
+  await requireWorkspace();
 
-  const [loads, carriers, settlements, invoices, expenses, drivers, payProfiles] = await Promise.all([
+  const [loads, carriers, settlements] = await Promise.all([
     getLoads(),
     getCarriers(),
     getSettlements(),
-    db.select().from(schema.invoices).orderBy(desc(schema.invoices.createdAt)),
-    db.select().from(schema.loadExpenses).orderBy(desc(schema.loadExpenses.incurredAt)),
-    db.select().from(schema.carrierDrivers).where(eq(schema.carrierDrivers.status, 'active')).orderBy(asc(schema.carrierDrivers.lastName)),
-    db.select().from(schema.driverPayProfiles),
   ]);
-  return { loads, carriers, settlements, invoices, expenses, drivers, payProfiles };
+  const loadIds = loads.map(load => load.id);
+  const carrierIds = carriers.map(carrier => carrier.id);
+  const [scopedInvoices, scopedExpenses, scopedDrivers, scopedPayProfiles] = await Promise.all([
+    loadIds.length ? db.select().from(schema.invoices).where(inArray(schema.invoices.loadId, loadIds)).orderBy(desc(schema.invoices.createdAt)) : Promise.resolve([]),
+    loadIds.length ? db.select().from(schema.loadExpenses).where(inArray(schema.loadExpenses.loadId, loadIds)).orderBy(desc(schema.loadExpenses.incurredAt)) : Promise.resolve([]),
+    carrierIds.length ? db.select().from(schema.carrierDrivers).where(and(eq(schema.carrierDrivers.status, 'active'), inArray(schema.carrierDrivers.carrierId, carrierIds))).orderBy(asc(schema.carrierDrivers.lastName)) : Promise.resolve([]),
+    carrierIds.length ? db.select().from(schema.driverPayProfiles).innerJoin(schema.carrierDrivers, eq(schema.driverPayProfiles.driverId, schema.carrierDrivers.id)).where(inArray(schema.carrierDrivers.carrierId, carrierIds)).then(rows => rows.map(row => row.driver_pay_profiles)) : Promise.resolve([]),
+  ]);
+  return { loads, carriers, settlements, invoices: scopedInvoices, expenses: scopedExpenses, drivers: scopedDrivers, payProfiles: scopedPayProfiles };
 }
 
 export async function createInvoiceForLoad(loadId: string) {
-  await requireAdmin();
-  const load = await db.query.loads.findFirst({ where: eq(schema.loads.id, loadId) });
+  const load = await requireScopedLoad(loadId);
   if (!load) throw new Error('Load not found.');
   if (!['delivered', 'pod_received', 'invoiced', 'paid'].includes(load.status)) {
     throw new Error('A load must be delivered before it can be invoiced.');
@@ -231,9 +248,10 @@ export async function createInvoiceForLoad(loadId: string) {
 }
 
 export async function setInvoiceStatus(invoiceId: string, status: 'draft' | 'sent' | 'paid') {
-  await requireAdmin();
+  await requireWorkspace();
   const invoice = await db.query.invoices.findFirst({ where: eq(schema.invoices.id, invoiceId) });
   if (!invoice) throw new Error('Invoice not found.');
+  await requireScopedLoad(invoice.loadId);
 
   const now = new Date().toISOString();
   await db.update(schema.invoices)
@@ -258,12 +276,11 @@ export async function addLoadExpense(input: {
   vendorName?: string;
   notes?: string;
 }) {
-  await requireAdmin();
+  await requireWorkspace();
   if (!input.category.trim() || !Number.isFinite(input.amount) || input.amount <= 0) {
     throw new Error('Enter a valid payable expense.');
   }
-  const load = await db.query.loads.findFirst({ where: eq(schema.loads.id, input.loadId) });
-  if (!load) throw new Error('Load not found.');
+  const load = await requireScopedLoad(input.loadId);
 
   await db.insert(schema.loadExpenses).values({
     id: crypto.randomUUID(),
@@ -286,7 +303,10 @@ export async function recordCarrierSettlement(input: {
   feeTotal: number;
   netTotal: number;
 }) {
-  await requireAdmin();
+  await requireWorkspace();
+  if (!(await getCarriers()).some(carrier => carrier.id === input.carrierId)) {
+    throw new Error('You do not have permission to settle this carrier.');
+  }
   if (!input.loadIds.length) throw new Error('A settlement needs at least one load.');
 
   await db.insert(schema.settlements).values({

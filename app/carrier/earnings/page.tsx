@@ -177,8 +177,8 @@ function SettlementRow({ s, loads, carrierName }: { s: SonexSettlement; loads: S
         l.pickupDate,
         `${l.pickupCity}, ${l.pickupState} → ${l.deliveryCity}, ${l.deliveryState}`,
         `$${l.rate.toFixed(2)}`,
-        `${l.dispatchFeePercent}%`,
-        `$${l.dispatchFeeAmount.toFixed(2)}`,
+        `${l.totalFeePercent}%`,
+        `$${l.totalFeeAmount.toFixed(2)}`,
         `$${l.carrierNet.toFixed(2)}`
       ]);
       
@@ -218,7 +218,7 @@ function SettlementRow({ s, loads, carrierName }: { s: SonexSettlement; loads: S
         `Generated: ${new Date(s.generatedAt).toLocaleDateString()}`,
         '',
         `Gross Total: $${s.grossTotal.toFixed(2)}`,
-        `Dispatch Fees: $${s.feeTotal.toFixed(2)}`,
+        `Total Fees: $${s.feeTotal.toFixed(2)}`,
         `Net Paid: $${s.netTotal.toFixed(2)}`,
         `Loads: ${s.loadIds.length}`,
       ];
@@ -309,7 +309,7 @@ export default function CarrierEarningsPage() {
 
   // Financial summaries
   const totalGross = useMemo(() => filteredLoads.reduce((s, l) => s + l.rate, 0), [filteredLoads]);
-  const totalFees = useMemo(() => filteredLoads.reduce((s, l) => s + l.dispatchFeeAmount, 0), [filteredLoads]);
+  const totalFees = useMemo(() => filteredLoads.reduce((s, l) => s + l.totalFeeAmount, 0), [filteredLoads]);
   const totalNet = useMemo(() => totalGross - totalFees, [totalGross, totalFees]);
   const totalMiles = useMemo(() => filteredLoads.reduce((s, l) => s + l.miles, 0), [filteredLoads]);
   const avgRPM = useMemo(() => {
@@ -379,7 +379,7 @@ export default function CarrierEarningsPage() {
       l.status,
       l.miles,
       l.rate,
-      l.dispatchFeeAmount,
+      l.totalFeeAmount,
       l.carrierNet,
       l.ratePerMile
     ]);
@@ -504,7 +504,7 @@ export default function CarrierEarningsPage() {
                     { label: 'Route', col: '' },
                     { label: 'Status', col: 'status' },
                     { label: 'Gross', col: 'rate' },
-                    { label: 'Fees', col: 'dispatchFeeAmount' },
+                    { label: 'Fees', col: 'totalFeeAmount' },
                     { label: 'Net Pay', col: 'carrierNet' },
                     { label: 'RPM', col: 'ratePerMile' },
                   ].map(({ label, col }) => (
@@ -541,8 +541,8 @@ export default function CarrierEarningsPage() {
                       </td>
                       <td className="px-4 py-3.5 text-xs font-mono text-slate-300">{fmt$(load.rate)}</td>
                       <td className="px-4 py-3.5 text-xs font-mono text-slate-500">
-                        -{fmt$(load.dispatchFeeAmount)}
-                        <span className="text-[10px] text-slate-600 block mt-0.5">{load.dispatchFeePercent}%</span>
+                        -{fmt$(load.totalFeeAmount)}
+                        <span className="text-[10px] text-slate-600 block mt-0.5">{load.totalFeePercent}%</span>
                       </td>
                       <td className="px-4 py-3.5 text-xs font-bold font-mono text-amber-400">{fmt$(load.carrierNet)}</td>
                       <td className="px-4 py-3.5 text-xs font-mono">

@@ -7,9 +7,10 @@ import type { LucideIcon } from 'lucide-react';
 import {
   Command,
   LayoutDashboard, LogOut, Menu, Package, ReceiptText, Search, Settings,
-  Users, Plus,
+  Users, Plus, Undo2,
 } from 'lucide-react';
 import { useSonexAuth } from '@/lib/sonexAuth';
+import { returnFromPortalPreviewAction } from '@/lib/authActions';
 import { NotificationBell } from '@/components/sonex/NotificationBell';
 import { getCarriers, getLoads } from '@/lib/sonexStore';
 import { SonexMark } from '@/components/sonex/SonexMark';
@@ -22,20 +23,21 @@ type NavItem = {
   group: 'Operations' | 'Finance' | 'Administration';
   badge?: BadgeKey;
   exact?: boolean;
+  adminOnly?: boolean;
 };
 
 const navigation: NavItem[] = [
   { label: 'Dashboard', href: '/sonex', icon: LayoutDashboard, group: 'Operations', exact: true },
   { label: 'Load Management', href: '/sonex/loads', icon: Package, group: 'Operations', badge: 'activeLoads' },
-  { label: 'Carriers & Drivers', href: '/sonex/carriers', icon: Users, group: 'Operations', badge: 'carriers' },
+  { label: 'Carrier Management', href: '/sonex/carriers', icon: Users, group: 'Operations', badge: 'carriers' },
   { label: 'Accounting', href: '/sonex/accounting', icon: ReceiptText, group: 'Finance' },
-  { label: 'Settings', href: '/sonex/settings', icon: Settings, group: 'Administration' },
+  { label: 'Settings', href: '/sonex/settings', icon: Settings, group: 'Administration', adminOnly: true },
 ];
 
 const groups: NavItem['group'][] = ['Operations', 'Finance', 'Administration'];
 
 export default function SonexLayout({ children }: { children: React.ReactNode }) {
-  const { isAdmin, user, logout, isAuthenticated } = useSonexAuth();
+  const { isAdmin, isMcOwner, user, logout, isAuthenticated } = useSonexAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -45,8 +47,9 @@ export default function SonexLayout({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     if (pathname === '/sonex/login') return;
-    if (!isAuthenticated || !isAdmin) router.replace('/sonex/login');
-  }, [isAdmin, isAuthenticated, pathname, router]);
+    if (!isAuthenticated || (!isAdmin && !isMcOwner)) router.replace('/sonex/login');
+    if (isMcOwner && (pathname.startsWith('/sonex/settings') || pathname.startsWith('/sonex/mc-owners'))) router.replace('/sonex');
+  }, [isAdmin, isMcOwner, isAuthenticated, pathname, router]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -61,19 +64,25 @@ export default function SonexLayout({ children }: { children: React.ReactNode })
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated || !isAdmin) return;
+    if (!isAuthenticated || (!isAdmin && !isMcOwner)) return;
     Promise.all([getCarriers(), getLoads()])
       .then(([carriers, loads]) => setBadges({
         carriers: carriers.filter(carrier => carrier.status === 'active').length,
         activeLoads: loads.filter(load => ['booked', 'dispatched', 'in_transit'].includes(load.status)).length,
       }))
       .catch(() => undefined);
-  }, [isAuthenticated, isAdmin, pathname]);
+  }, [isAuthenticated, isAdmin, isMcOwner, pathname]);
+
+  const availableNavigation = useMemo(
+    () => navigation.filter(item => !item.adminOnly || isAdmin),
+    [isAdmin],
+  );
 
   const matchingCommands = useMemo(() => {
     const term = query.trim().toLowerCase();
-    return term ? navigation.filter(item => item.label.toLowerCase().includes(term)) : navigation;
-  }, [query]);
+    const source = term ? availableNavigation.filter(item => item.label.toLowerCase().includes(term)) : availableNavigation;
+    return source;
+  }, [availableNavigation, query]);
 
   const isActive = (item: NavItem) => item.exact
     ? pathname === item.href
@@ -86,11 +95,17 @@ export default function SonexLayout({ children }: { children: React.ReactNode })
     router.push(href);
   };
 
-  const currentSection = navigation.find(isActive)?.label ?? 'Dispatch';
+  const returnToAdmin = async () => {
+    const result = await returnFromPortalPreviewAction();
+    if (result.success) window.location.assign('/sonex');
+  };
+
+  const currentSection = availableNavigation.find(isActive)?.label ?? 'Dispatch';
+  const workspaceTitle = isMcOwner ? 'MC Owner Portal' : 'Sonex Dispatch';
 
   if (pathname === '/sonex/login') return <>{children}</>;
 
-  if (!isAuthenticated || !isAdmin) {
+  if (!isAuthenticated || (!isAdmin && !isMcOwner)) {
     return <div className="grid min-h-screen place-items-center bg-slate-950 text-sm text-slate-400">Loading workspace...</div>;
   }
 
@@ -109,7 +124,7 @@ export default function SonexLayout({ children }: { children: React.ReactNode })
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           {groups.map(group => {
-            const items = navigation.filter(item => item.group === group);
+            const items = availableNavigation.filter(item => item.group === group);
             return (
               <div key={group} className="mb-4">
                 <div className="space-y-0.5">
@@ -141,16 +156,17 @@ export default function SonexLayout({ children }: { children: React.ReactNode })
       <div className={`min-h-screen transition-all duration-200 ${sidebarWidth}`}>
         <header className="sticky top-0 z-30 flex h-[72px] items-center gap-4 bg-gradient-to-r from-[#8b3fc5] via-[#6b46d2] to-[#405bd9] px-5 text-white">
           <button onClick={() => setMobileOpen(true)} title="Open navigation" className="inline-flex h-9 w-9 items-center justify-center text-white lg:hidden"><Menu size={19} /></button>
-          <span className="hidden text-[20px] font-medium lg:inline-flex">Sonex Dispatch / <span className="ml-1">{currentSection}</span></span>
+          <span className="hidden text-[20px] font-medium lg:inline-flex">{workspaceTitle} / <span className="ml-1">{currentSection}</span></span>
           <button onClick={() => setCommandOpen(true)} className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-full bg-white px-4 text-left text-sm text-[#43517a] shadow-sm sm:mx-auto sm:max-w-[395px]">
             <Search size={15} className="text-blue-500" />
             <span className="truncate">Ctrl + K to search</span>
             <span className="ml-auto text-xs text-[#5e35c1]">All</span>
           </button>
           <div className="ml-auto flex items-center gap-3">
+            {user?.adminPreview && <button onClick={() => void returnToAdmin()} title="Return to Sonex admin" className="hidden items-center gap-2 rounded-full border border-white/80 px-4 py-2 text-sm sm:inline-flex"><Undo2 size={15} /> Return to admin</button>}
             <button onClick={() => navigate('/sonex/loads?new=1')} title="Create load" className="hidden items-center gap-2 rounded-full border border-white/80 px-5 py-2 text-sm sm:inline-flex"><Plus size={16} /> New load</button>
             <NotificationBell role="admin" />
-            <button onClick={() => navigate('/sonex/settings')} title="Settings" className="grid h-9 w-9 place-items-center rounded-full hover:bg-white/10"><Settings size={19} /></button>
+            {isAdmin && <button onClick={() => navigate('/sonex/settings')} title="Settings" className="grid h-9 w-9 place-items-center rounded-full hover:bg-white/10"><Settings size={19} /></button>}
           </div>
         </header>
         <main data-tms-surface className="min-h-[calc(100vh-64px)]">{children}</main>

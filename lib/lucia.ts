@@ -20,6 +20,7 @@ export const lucia = new Lucia(adapter, {
       role: attributes.role,
       displayName: attributes.displayName,
       carrierId: attributes.carrierId,
+      mcOwnerId: attributes.mcOwnerId,
       avatar: attributes.avatar,
     };
   },
@@ -33,6 +34,7 @@ declare module 'lucia' {
       role: string;
       displayName: string;
       carrierId: string | null;
+      mcOwnerId: string | null;
       avatar: string | null;
     };
   }

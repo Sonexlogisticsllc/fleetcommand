@@ -10,6 +10,7 @@ interface SonexAuthContextType {
   logout: () => Promise<void>;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  isMcOwner: boolean;
   isCarrier: boolean;
 }
 
@@ -19,6 +20,7 @@ const SonexAuthContext = createContext<SonexAuthContextType>({
   logout: async () => {},
   isAuthenticated: false,
   isAdmin: false,
+  isMcOwner: false,
   isCarrier: false,
 });
 
@@ -60,6 +62,7 @@ export function SonexAuthProvider({ children }: { children: ReactNode }) {
       logout,
       isAuthenticated: !!user,
       isAdmin: user?.role === 'admin',
+      isMcOwner: user?.role === 'mc_owner',
       isCarrier: user?.role === 'carrier',
     }}>
       {!loading && children}

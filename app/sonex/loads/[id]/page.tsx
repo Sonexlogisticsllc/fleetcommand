@@ -197,8 +197,8 @@ export default function LoadDetailPage() {
 
   const loggedEvents = useMemo(() => new Set(checkins.map(c => c.event)), [checkins]);
   const financialPreview = useMemo(() => {
-    if (!load) return { dispatchFeeAmount: 0, carrierNet: 0, ratePerMile: 0 };
-    return computeLoadFinancials(Number(load.rate), Number(load.miles), Number(load.dispatchFeePercent));
+    if (!load) return { totalFeeAmount: 0, dispatchFeeAmount: 0, mcOwnerFeeAmount: 0, carrierNet: 0, ratePerMile: 0 };
+    return computeLoadFinancials(Number(load.rate), Number(load.miles), Number(load.totalFeePercent), Number(load.dispatchFeePercent));
   }, [load?.rate, load?.miles, load?.dispatchFeePercent]);
 
   if (!load) {
@@ -768,14 +768,17 @@ export default function LoadDetailPage() {
                     onChange={e => {
                       const nextCarrier = carriers.find(c => c.id === e.target.value);
                       set('carrierId', e.target.value || '');
-                      if (nextCarrier) set('dispatchFeePercent', nextCarrier.dispatchFeePercent);
+                      if (nextCarrier) {
+                        set('totalFeePercent', nextCarrier.totalFeePercent);
+                        set('dispatchFeePercent', nextCarrier.dispatchFeePercent);
+                      }
                     }}
                     className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-xs text-slate-700 focus:border-blue-500 focus:outline-none"
                   >
                     <option value="">-- Unassigned --</option>
                     {carriers.map(c => (
                       <option key={c.id} value={c.id}>
-                        {c.firstName} {c.lastName} ({EQUIPMENT_TYPE_LABELS[c.equipmentType]})
+                        {c.firstName} {c.lastName} · {c.mcHolderMC ? `MC ${c.mcHolderMC}` : c.mcNumber ? `MC ${c.mcNumber}` : 'Direct'}
                       </option>
                     ))}
                   </select>

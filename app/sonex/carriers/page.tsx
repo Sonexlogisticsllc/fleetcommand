@@ -3,14 +3,17 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Users, Plus, Search, ChevronRight, X, Check,
-  Truck, DollarSign, Shield, KeyRound, Eye, EyeOff, Copy,
+  Users, Plus, Search, X, Check,
+  Truck, DollarSign, Shield, KeyRound, Eye, EyeOff, Copy, LogIn, Pencil, Trash2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { getCarriers, addCarrier, getSettings } from '@/lib/sonexStore';
+import { getCarriers, addCarrier, deleteCarrier, getCarrierPortalAccounts, getMcOwners, getSettings } from '@/lib/sonexStore';
+import { startPortalPreviewAction } from '@/lib/authActions';
 import type {
-  SonexCarrier, CarrierStatus, EquipmentType, InsuranceType,
+  SonexCarrier, SonexMcOwner, CarrierStatus, EquipmentType, InsuranceType,
 } from '@/lib/sonexTypes';
+import { useSonexAuth } from '@/lib/sonexAuth';
+import { CarrierManagementTabs } from '@/components/sonex/CarrierManagementTabs';
 import {
   EQUIPMENT_TYPE_LABELS, INSURANCE_TYPE_LABELS,
 } from '@/lib/sonexTypes';
@@ -18,9 +21,9 @@ import {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const statusBadge: Record<CarrierStatus, string> = {
-  active: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/25',
-  inactive: 'bg-slate-500/20 text-slate-400 border-slate-500/20',
-  onboarding: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/25',
+  active: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  inactive: 'border-slate-200 bg-slate-100 text-slate-600',
+  onboarding: 'border-amber-200 bg-amber-50 text-amber-700',
 };
 
 // ─── Section Helper ───────────────────────────────────────────────────────────
@@ -44,6 +47,8 @@ const INSURANCE_OPTS = Object.entries(INSURANCE_TYPE_LABELS) as [InsuranceType, 
 const STATUS_OPTS: CarrierStatus[] = ['active', 'onboarding', 'inactive'];
 
 function AddCarrierModal({ onClose, onSaved }: AddCarrierModalProps) {
+  const { isAdmin } = useSonexAuth();
+  const [mcOwners, setMcOwners] = useState<SonexMcOwner[]>([]);
   const [form, setForm] = useState({
     // Contact
     firstName: '', lastName: '', email: '', phone: '',
@@ -62,7 +67,7 @@ function AddCarrierModal({ onClose, onSaved }: AddCarrierModalProps) {
     insuranceType: 'certificate_holder' as InsuranceType,
     insuranceCompany: '', insurancePolicyNumber: '',
     // Business
-    dispatchFeePercent: 10, status: 'active' as CarrierStatus, notes: '',
+    mcOwnerId: '', totalFeePercent: 10, dispatchFeePercent: 10, status: 'active' as CarrierStatus, notes: '',
     // Portal login
     portalEmail: '', portalPassword: '',
   });
@@ -74,6 +79,7 @@ function AddCarrierModal({ onClose, onSaved }: AddCarrierModalProps) {
     getSettings().then(s => {
       setForm(f => ({ ...f, dispatchFeePercent: s.defaultDispatchFeePercent }));
     });
+    getMcOwners().then(setMcOwners).catch(() => setMcOwners([]));
   }, []);
 
   const set = (k: string, v: unknown) => setForm(f => ({ ...f, [k]: v }));
@@ -217,7 +223,9 @@ function AddCarrierModal({ onClose, onSaved }: AddCarrierModalProps) {
           </Section>
 
           <Section title="Business" icon={DollarSign}>
-            {input('Dispatch Fee %', 'dispatchFeePercent', 'number')}
+            {isAdmin && <div className="col-span-2"><label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">MC owner / authority</label><select value={form.mcOwnerId} onChange={event => { const owner = mcOwners.find(item => item.id === event.target.value); setForm(current => ({ ...current, mcOwnerId: event.target.value, isLeasedMC: Boolean(owner) || current.isLeasedMC, mcHolderName: owner?.companyName ?? current.mcHolderName, mcHolderMC: owner?.mcNumber ?? current.mcHolderMC, totalFeePercent: owner?.defaultTotalFeePercent ?? current.totalFeePercent, dispatchFeePercent: owner?.defaultDispatchFeePercent ?? current.dispatchFeePercent })); }} className="h-10 w-full border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-blue-500"><option value="">Direct carrier - Sonex manages authority</option>{mcOwners.map(owner => <option key={owner.id} value={owner.id}>{owner.ownerName} · MC {owner.mcNumber}</option>)}</select></div>}
+            {isAdmin && input('Total Carrier Fee %', 'totalFeePercent', 'number')}
+            {isAdmin && input('Sonex Dispatch Fee %', 'dispatchFeePercent', 'number')}
             {select('Status', 'status', STATUS_OPTS.map(s => [s, s.charAt(0).toUpperCase() + s.slice(1)]))}
             <div className="col-span-2">
               <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Notes</label>
@@ -293,18 +301,39 @@ function AddCarrierModal({ onClose, onSaved }: AddCarrierModalProps) {
 
 export default function CarriersPage() {
   const router = useRouter();
+  const { isAdmin } = useSonexAuth();
   const [carriers, setCarriers] = useState<SonexCarrier[]>([]);
+  const [portalAccountIds, setPortalAccountIds] = useState<Record<string, string>>({});
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<CarrierStatus | 'all'>('all');
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'direct' | 'leased'>('all');
   const [showAdd, setShowAdd] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
   const load = () => {
-    getCarriers().then(setCarriers);
+    void getCarriers().then(setCarriers);
+    if (isAdmin) {
+      void getCarrierPortalAccounts().then(accounts => {
+        setPortalAccountIds(Object.fromEntries(accounts.map(account => [account.carrierId, account.userId])));
+      });
+    }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [isAdmin]);
 
-  const filtered = carriers.filter(c => {
+  const openPortal = async (event: React.MouseEvent, userId: string) => {
+    event.stopPropagation();
+    const result = await startPortalPreviewAction(userId);
+    if (!result.success || !result.destination) {
+      toast.error(result.error ?? 'Could not open the portal preview.');
+      return;
+    }
+    window.location.assign(result.destination);
+  };
+
+  const isLeasedCarrier = (carrier: SonexCarrier) => carrier.isLeasedMC || Boolean(carrier.mcOwnerId);
+  const scopedCarriers = carriers.filter(carrier => scopeFilter === 'all' || (scopeFilter === 'leased' ? isLeasedCarrier(carrier) : !isLeasedCarrier(carrier)));
+  const filtered = scopedCarriers.filter(c => {
     const q = search.toLowerCase();
     const nameMatch = `${c.firstName} ${c.lastName}`.toLowerCase().includes(q)
       || c.email.toLowerCase().includes(q)
@@ -313,44 +342,71 @@ export default function CarriersPage() {
     return nameMatch && statusMatch;
   });
 
+  const removeCarrier = async (event: React.MouseEvent, carrier: SonexCarrier) => {
+    event.stopPropagation();
+    const confirmation = `Remove ${carrier.firstName} ${carrier.lastName}'s portal access? Profiles with existing loads are archived so their load and financial history stay intact.`;
+    if (!window.confirm(confirmation)) return;
+
+    setRemovingId(carrier.id);
+    try {
+      const result = await deleteCarrier(carrier.id);
+      toast.success(result.disposition === 'archived' ? 'Carrier portal access removed. Historical profile archived.' : 'Carrier profile removed.');
+      load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not remove this carrier.');
+    } finally {
+      setRemovingId(null);
+    }
+  };
+
   return (
-    <div className="p-6 animate-fade-in">
+    <div className="p-4 sm:p-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold text-white">Carriers</h1>
-          <span className="bg-white/10 text-slate-400 text-xs font-semibold px-2.5 py-1 rounded-full">
-            {carriers.length}
-          </span>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-indigo-600">Carrier management</p>
+          <h1 className="mt-1 text-2xl font-semibold text-slate-950">Carrier Profiles</h1>
+          <p className="mt-1 text-sm text-slate-500">Every carrier profile, whether direct or leased under a managed MC authority.</p>
         </div>
         <button
           onClick={() => setShowAdd(true)}
-          className="btn-primary"
+          className="inline-flex items-center gap-2 bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
         >
           <Plus size={16} /> Add Carrier
         </button>
       </div>
 
+      <CarrierManagementTabs active="carriers" carrierCount={carriers.length} />
+
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-5">
         <div className="relative flex-1 max-w-xs">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search carriers…"
-            className="input-primary pl-9 py-2.5 text-sm"
+            className="h-10 w-full border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {([
+            ['all', `All carriers ${carriers.length}`],
+            ['direct', `Direct ${carriers.filter(carrier => !isLeasedCarrier(carrier)).length}`],
+            ['leased', `Leased ${carriers.filter(isLeasedCarrier).length}`],
+          ] as const).map(([scope, label]) => (
+            <button key={scope} onClick={() => setScopeFilter(scope)} className={`h-10 border px-3 text-xs font-semibold transition-colors ${scopeFilter === scope ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:text-indigo-700'}`}>
+              {label}
+            </button>
+          ))}
           {(['all', 'active', 'onboarding', 'inactive'] as const).map(s => (
             <button
               key={s}
               onClick={() => setStatusFilter(s)}
-              className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all border ${
+              className={`h-10 border px-3 text-xs font-semibold transition-colors ${
                 statusFilter === s
-                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                  : 'text-slate-500 border-white/10 hover:border-white/20 hover:text-slate-300'
+                  ? 'border-blue-600 bg-blue-600 text-white'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-700'
               }`}
             >
               {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
@@ -360,68 +416,74 @@ export default function CarriersPage() {
       </div>
 
       {/* Table */}
-      <div className="glass-card overflow-hidden">
+      <div className="overflow-hidden border border-slate-200 bg-white shadow-sm">
         {filtered.length === 0 ? (
           <div className="py-16 text-center">
-            <Users size={40} className="text-slate-700 mx-auto mb-3" />
-            <p className="text-slate-500 text-sm">No carriers found</p>
-            <p className="text-slate-600 text-xs mt-1">Try adjusting your search or filters.</p>
+            <Users size={40} className="mx-auto mb-3 text-slate-300" />
+            <p className="text-sm text-slate-600">No carrier profiles found</p>
+            <p className="mt-1 text-xs text-slate-400">Try adjusting your search or filters.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b border-white/[0.06]">
+            <table className="sonex-management-table w-full min-w-[920px] text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50">
                 <tr>
-                  {['Carrier', 'Equipment', 'Authority', 'Phone', 'Fee', 'Login', 'Status', ''].map(h => (
-                    <th key={h} className="text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-4 py-3">{h}</th>
+                  {['Carrier', 'Equipment', 'Authority', 'Phone', 'Fee', 'Login', 'Status', 'Actions'].map(h => (
+                    <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500">{h}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/[0.04]">
+              <tbody className="divide-y divide-slate-100">
                 {filtered.map(carrier => {
                   const initials = `${carrier.firstName[0]}${carrier.lastName[0]}`.toUpperCase();
                   return (
                     <tr
                       key={carrier.id}
                       onClick={() => router.push(`/sonex/carriers/${carrier.id}`)}
-                      className="table-row-hover cursor-pointer"
+                      className="cursor-pointer transition-colors hover:bg-sky-50"
                     >
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/20 flex items-center justify-center shrink-0">
-                            <span className="text-amber-400 text-xs font-bold">{initials}</span>
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center border border-blue-200 bg-blue-50">
+                            <span className="text-xs font-bold text-blue-700">{initials}</span>
                           </div>
                           <div>
-                            <p className="text-white font-semibold text-sm">{carrier.firstName} {carrier.lastName}</p>
-                            <p className="text-slate-600 text-[10px]">{carrier.email}</p>
+                            <p className="text-sm font-semibold text-slate-900">{carrier.firstName} {carrier.lastName}</p>
+                            <p className="text-[10px] text-slate-500">{carrier.email}</p>
                           </div>
                         </div>
                       </td>
                       <td className="px-4 py-3.5">
-                        <span className="text-xs bg-white/5 text-slate-300 px-2 py-1 rounded-lg border border-white/[0.06]">
+                        <span className="border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700">
                           {EQUIPMENT_TYPE_LABELS[carrier.equipmentType]}
                         </span>
                       </td>
-                      <td className="px-4 py-3.5 text-xs text-slate-400">
+                      <td className="px-4 py-3.5 text-xs text-slate-600">
                         {carrier.hasOwnAuthority
-                          ? <span className="text-emerald-400 font-mono">MC-{carrier.mcNumber}</span>
-                          : carrier.isLeasedMC
-                            ? <span className="text-slate-500">Leased — {carrier.mcHolderName}</span>
-                            : <span className="text-slate-600">—</span>
+                          ? <span className="font-mono text-emerald-700">MC-{carrier.mcNumber}</span>
+                          : isLeasedCarrier(carrier)
+                            ? <span>Leased - {carrier.mcHolderName}</span>
+                            : <span className="text-slate-500">Sonex direct</span>
                         }
                       </td>
-                      <td className="px-4 py-3.5 text-xs text-slate-400 font-mono">{carrier.phone}</td>
-                      <td className="px-4 py-3.5 text-xs text-amber-400 font-semibold">{carrier.dispatchFeePercent}%</td>
-                      <td className="px-4 py-3.5 text-xs text-slate-400 font-mono">{carrier.portalEmail}</td>
+                      <td className="px-4 py-3.5 font-mono text-xs text-slate-600">{carrier.phone}</td>
+                      <td className="px-4 py-3.5 text-xs font-semibold text-blue-700">{carrier.dispatchFeePercent}%</td>
+                      <td className="px-4 py-3.5 font-mono text-xs text-slate-600">{carrier.portalEmail}</td>
                       <td className="px-4 py-3.5">
-                        <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-full border ${statusBadge[carrier.status]}`}>
+                        <span className={`border px-2 py-1 text-[10px] font-semibold ${statusBadge[carrier.status]}`}>
                           {carrier.status.charAt(0).toUpperCase() + carrier.status.slice(1)}
                         </span>
                       </td>
                       <td className="px-4 py-3.5">
-                        <button className="flex items-center gap-1 text-xs text-slate-500 hover:text-amber-400 transition-colors px-2 py-1 rounded-lg hover:bg-white/5">
-                          View <ChevronRight size={13} />
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          {isAdmin && portalAccountIds[carrier.id] && <button onClick={event => void openPortal(event, portalAccountIds[carrier.id])} title="Open this carrier portal" className="flex items-center gap-1 border border-sky-200 bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-100"><LogIn size={13} /> Portal</button>}
+                          <button onClick={event => { event.stopPropagation(); router.push(`/sonex/carriers/${carrier.id}`); }} className="flex items-center gap-1 px-2 py-1 text-xs font-semibold text-slate-600 transition-colors hover:text-blue-700">
+                            <Pencil size={13} /> Edit
+                          </button>
+                          {isAdmin && <button onClick={event => void removeCarrier(event, carrier)} disabled={removingId === carrier.id} className="flex items-center gap-1 px-2 py-1 text-xs font-semibold text-rose-600 transition-colors hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-50">
+                            <Trash2 size={13} /> {removingId === carrier.id ? 'Removing' : 'Remove'}
+                          </button>}
+                        </div>
                       </td>
                     </tr>
                   );

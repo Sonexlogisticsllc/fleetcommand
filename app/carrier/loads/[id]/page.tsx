@@ -7,7 +7,8 @@ export default function CarrierLoadRedirect() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace('/carrier');
+    const loadId = window.location.pathname.split('/').pop();
+    router.replace(`/carrier/loads?load=${encodeURIComponent(loadId ?? '')}`);
   }, [router]);
 
   return (

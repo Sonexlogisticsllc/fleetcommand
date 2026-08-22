@@ -116,7 +116,7 @@ export default function CarrierProfilePage() {
   const loadSummary = useMemo(() => ({
     total: loads.length,
     gross: loads.reduce((sum, load) => sum + load.rate, 0),
-    fees: loads.reduce((sum, load) => sum + load.dispatchFeeAmount, 0),
+    fees: loads.reduce((sum, load) => sum + load.totalFeeAmount, 0),
     net: loads.reduce((sum, load) => sum + load.carrierNet, 0),
   }), [loads]);
 
@@ -272,7 +272,7 @@ export default function CarrierProfilePage() {
                         <td className="px-4 py-3 text-xs text-slate-400">{new Date(load.pickupDate).toLocaleDateString()}</td>
                         <td className="px-4 py-3 text-xs text-slate-300">{load.pickupState} {'->'} {load.deliveryState}</td>
                         <td className="px-4 py-3 text-xs font-semibold text-white">{fmt$(load.rate)}</td>
-                        <td className="px-4 py-3 text-xs text-amber-400">{fmt$(load.dispatchFeeAmount)}</td>
+                        <td className="px-4 py-3 text-xs text-amber-400">{fmt$(load.totalFeeAmount)}</td>
                         <td className="px-4 py-3 text-xs text-emerald-400">{fmt$(load.carrierNet)}</td>
                         <td className="px-4 py-3">
                           <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLOR[load.status]}`}>

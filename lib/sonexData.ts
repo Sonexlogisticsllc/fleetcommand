@@ -53,6 +53,7 @@ export const MOCK_CARRIERS: SonexCarrier[] = [
     insuranceType: 'vin_scheduled',
     insuranceCompany: 'Old Republic Insurance',
     insurancePolicyNumber: 'ORI-2024-88291',
+    totalFeePercent: 10,
     dispatchFeePercent: 10,
     status: 'active',
     notes: 'Prefers no Northeast runs. Pays insurance weekly. Excellent communicator â€” always checks in on time. Available M-F, sometimes weekends for good rates.',
@@ -92,6 +93,7 @@ export const MOCK_CARRIERS: SonexCarrier[] = [
     insuranceType: 'certificate_holder',
     insuranceCompany: 'Progressive Commercial',
     insurancePolicyNumber: 'PRG-HS-2024-77234',
+    totalFeePercent: 10,
     dispatchFeePercent: 10,
     status: 'active',
     notes: 'Hotshot specialist â€” great for time-sensitive LTL and partial loads. Strong in TX, OK, LA triangle. Medical card renewal coming up in 60 days.',
@@ -125,6 +127,7 @@ export const MOCK_CARRIERS: SonexCarrier[] = [
     insuranceType: 'additional_insured',
     insuranceCompany: 'Nationwide Insurance',
     insurancePolicyNumber: 'NW-COM-2024-44521',
+    totalFeePercent: 8,
     dispatchFeePercent: 8,
     status: 'active',
     notes: 'Excellent driver. Works primarily Midwest and Great Lakes region. 8% rate agreed â€” she has low overhead. Never misses a delivery window.',
@@ -164,6 +167,7 @@ export const MOCK_CARRIERS: SonexCarrier[] = [
     insuranceType: 'certificate_holder',
     insuranceCompany: 'Canal Insurance Company',
     insurancePolicyNumber: 'CAN-2024-98123',
+    totalFeePercent: 10,
     dispatchFeePercent: 10,
     status: 'onboarding',
     notes: 'New carrier â€” onboarding in progress. Still waiting on signed dispatch agreement and updated COI. Strong SW and West Coast routes. Spoke by phone â€” reliable guy.',
@@ -202,6 +206,7 @@ export const MOCK_CARRIERS: SonexCarrier[] = [
     insuranceType: 'vin_scheduled',
     insuranceCompany: 'Great West Casualty',
     insurancePolicyNumber: 'GWC-2023-55412',
+    totalFeePercent: 10,
     dispatchFeePercent: 10,
     status: 'inactive',
     notes: 'Went inactive June 2025 â€” moved to company driving job. May return to owner-op in Q4 2025. Keep on file.',
@@ -214,10 +219,11 @@ export const MOCK_CARRIERS: SonexCarrier[] = [
 // â”€â”€â”€ Helper: compute financials â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function calcLoad(rate: number, miles: number, feePercent: number) {
+  const totalFeeAmount = Math.round(rate * (feePercent / 100) * 100) / 100;
   const dispatchFeeAmount = Math.round(rate * (feePercent / 100) * 100) / 100;
   const carrierNet = Math.round((rate - dispatchFeeAmount) * 100) / 100;
   const ratePerMile = miles > 0 ? Math.round((rate / miles) * 100) / 100 : 0;
-  return { dispatchFeeAmount, carrierNet, ratePerMile };
+  return { totalFeeAmount, dispatchFeeAmount, mcOwnerFeeAmount: 0, carrierNet, ratePerMile };
 }
 
 // â”€â”€â”€ Loads â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -228,7 +234,7 @@ function makeLoad(
   }
 ): SonexLoad {
   const feePercent = override.feePercent ?? 10;
-  const { dispatchFeeAmount, carrierNet, ratePerMile } = calcLoad(override.rate, override.miles, feePercent);
+  const { totalFeeAmount, dispatchFeeAmount, mcOwnerFeeAmount, carrierNet, ratePerMile } = calcLoad(override.rate, override.miles, feePercent);
   return {
     id,
     loadNumber: num,
@@ -253,8 +259,11 @@ function makeLoad(
     commodity: '',
     weight: 0,
     status: 'paid',
+    totalFeePercent: feePercent,
+    totalFeeAmount,
     dispatchFeePercent: feePercent,
     dispatchFeeAmount,
+    mcOwnerFeeAmount,
     carrierNet,
     ratePerMile,
     notes: '',

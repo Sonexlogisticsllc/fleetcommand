@@ -1,10 +1,12 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowRight, Download, FilePlus2, Landmark, Loader2, Plus, ReceiptText, RefreshCw, WalletCards } from 'lucide-react';
+import { Download, FilePlus2, Loader2, Plus, ReceiptText, RefreshCw } from 'lucide-react';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import toast from 'react-hot-toast';
 import type { SonexLoad } from '@/lib/sonexTypes';
 import { calculateDriverLoadPay } from '@/lib/financialEngine';
+import { useSonexAuth } from '@/lib/sonexAuth';
 import {
   addLoadExpense,
   createInvoiceForLoad,
@@ -86,7 +88,57 @@ function isoDate(value: Date) {
   return value.getFullYear() + '-' + String(value.getMonth() + 1).padStart(2, '0') + '-' + String(value.getDate()).padStart(2, '0');
 }
 
+function FinancialReportingOverview({ loads, isMcOwner }: { loads: SonexLoad[]; isMcOwner: boolean }) {
+  const completedLoads = useMemo(() => loads.filter(load => eligibleStatuses.has(load.status)), [loads]);
+  const totalGross = useMemo(() => completedLoads.reduce((total, load) => total + load.rate, 0), [completedLoads]);
+  const totalFee = useMemo(() => completedLoads.reduce((total, load) => total + load.totalFeeAmount, 0), [completedLoads]);
+  const dispatchGross = useMemo(() => completedLoads.reduce((total, load) => total + load.dispatchFeeAmount, 0), [completedLoads]);
+  const ownerGross = useMemo(() => completedLoads.reduce((total, load) => total + load.mcOwnerFeeAmount, 0), [completedLoads]);
+  const carrierNet = useMemo(() => completedLoads.reduce((total, load) => total + load.carrierNet, 0), [completedLoads]);
+  const totalMiles = useMemo(() => completedLoads.reduce((total, load) => total + load.miles, 0), [completedLoads]);
+  const avgRpm = totalMiles ? totalGross / totalMiles : 0;
+  const weeklyRows = useMemo(() => {
+    const anchor = completedLoads.reduce((latest, load) => load.pickupDate > latest ? load.pickupDate : latest, new Date().toISOString().slice(0, 10));
+    const end = new Date(`${anchor}T12:00:00`);
+    return Array.from({ length: 8 }, (_, index) => {
+      const day = new Date(end); day.setDate(day.getDate() - (7 - index) * 7);
+      const from = new Date(day); from.setDate(day.getDate() - 6);
+      const group = completedLoads.filter(load => {
+        const date = new Date(`${load.pickupDate}T12:00:00`);
+        return date >= from && date <= day;
+      });
+      return { week: from.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), gross: group.reduce((sum, load) => sum + load.rate, 0), net: group.reduce((sum, load) => sum + (isMcOwner ? load.mcOwnerFeeAmount : load.carrierNet), 0) };
+    });
+  }, [completedLoads, isMcOwner]);
+  const statusRows = useMemo(() => ['delivered', 'pod_received', 'invoiced', 'paid'].map(status => {
+    const group = completedLoads.filter(load => load.status === status);
+    return { name: status === 'pod_received' ? 'POD' : status[0].toUpperCase() + status.slice(1), gross: group.reduce((sum, load) => sum + load.rate, 0), net: group.reduce((sum, load) => sum + (isMcOwner ? load.mcOwnerFeeAmount : load.carrierNet), 0) };
+  }), [completedLoads, isMcOwner]);
+  const cards = isMcOwner
+    ? [
+      ['Total gross revenue', totalGross, 'Leased carrier loads'],
+      ['Total authority fees', totalFee, totalGross ? `${(totalFee / totalGross * 100).toFixed(1)}% total fee` : '0% total fee'],
+      ['Sonex dispatch fees', dispatchGross, 'Dispatch share'],
+      ['MC owner gross', ownerGross, 'Your authority share'],
+    ]
+    : [
+      ['Total gross revenue', totalGross, `${completedLoads.length} completed loads`],
+      ['Sonex dispatch gross', dispatchGross, 'Dispatch revenue'],
+      ['MC owner gross', ownerGross, 'Authority share'],
+      ['Carrier net pay', carrierNet, `${avgRpm.toFixed(2)} average RPM`],
+    ];
+
+  return (
+    <section className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3"><div><div className="mb-3 h-1 w-14 bg-sky-500" /><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-indigo-600">Financial reporting</p><h1 className="mt-1 text-2xl font-semibold text-slate-950">{isMcOwner ? 'Authority Financials' : 'Financial Reporting'}</h1><p className="mt-1 text-sm text-slate-500">Revenue, fees, and settlement performance across your accessible loads.</p></div><span className="font-mono text-xs text-slate-500">{completedLoads.length} completed loads</span></div>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{cards.map(([label, value, detail], index) => <div key={String(label)} className="border border-slate-200 bg-white p-5 shadow-sm" style={{ borderLeftWidth: 4, borderLeftColor: ['#38bdf8', '#7c3aed', '#10b981', '#14b8a6'][index] }}><p className="text-[11px] font-semibold uppercase tracking-[0.09em] text-slate-500">{label}</p><p className="mt-2 font-mono text-2xl font-bold text-slate-900">{money(Number(value))}</p><p className="mt-1 text-xs text-slate-500">{detail}</p></div>)}</div>
+      <div className="grid gap-5 xl:grid-cols-2"><section className="border border-slate-200 bg-white p-5 shadow-sm"><p className="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Weekly earnings (last 8 weeks)</p><div className="mt-4 h-[220px]"><ResponsiveContainer width="100%" height="100%"><BarChart data={weeklyRows} barCategoryGap="25%"><CartesianGrid vertical={false} stroke="#e5e7eb" /><XAxis dataKey="week" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} /><YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} width={48} /><Tooltip /><Bar dataKey="gross" name="Gross" fill="#fbbf24" radius={[4, 4, 0, 0]} /><Bar dataKey="net" name={isMcOwner ? 'MC owner gross' : 'Carrier net'} fill="#10b981" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer></div></section><section className="border border-slate-200 bg-white p-5 shadow-sm"><p className="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Earnings by load status</p><div className="mt-4 h-[220px]"><ResponsiveContainer width="100%" height="100%"><BarChart data={statusRows} barCategoryGap="25%"><CartesianGrid vertical={false} stroke="#e5e7eb" /><XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} /><YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} width={48} /><Tooltip /><Bar dataKey="gross" name="Gross" fill="#fde68a" stroke="#f59e0b" radius={[4, 4, 0, 0]} /><Bar dataKey="net" name={isMcOwner ? 'MC owner gross' : 'Carrier net'} fill="#10b981" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer></div></section></div>
+    </section>
+  );
+}
+
 export default function AccountingPage() {
+  const { isMcOwner } = useSonexAuth();
   const [data, setData] = useState<AccountingData | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -141,15 +193,6 @@ export default function AccountingPage() {
     () => (data?.loads ?? []).filter(load => eligibleStatuses.has(load.status) && !invoiceLoadIds.has(load.id)),
     [data, invoiceLoadIds],
   );
-
-  const receivables = (data?.invoices ?? [])
-    .filter(invoice => invoice.status !== 'paid')
-    .reduce((total, invoice) => total + invoice.amount, 0);
-  const collected = (data?.invoices ?? [])
-    .filter(invoice => invoice.status === 'paid')
-    .reduce((total, invoice) => total + invoice.amount, 0);
-  const payables = (data?.expenses ?? []).reduce((total, expense) => total + expense.amount, 0);
-  const driverPay = (data?.settlements ?? []).reduce((total, settlement) => total + settlement.netTotal, 0);
 
   const createInvoice = async (loadId: string) => {
     setBusyId('invoice-' + loadId);
@@ -270,7 +313,7 @@ export default function AccountingPage() {
     try {
       const [{ default: JsPdf }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
       const grossTotal = settlementLoads.reduce((total, load) => total + load.rate, 0);
-      const feeTotal = settlementLoads.reduce((total, load) => total + load.dispatchFeeAmount, 0);
+      const feeTotal = settlementLoads.reduce((total, load) => total + load.totalFeeAmount, 0);
       const netTotal = settlementLoads.reduce((total, load) => total + load.carrierNet, 0);
       const driverPayTotal = settlementLoads.reduce((total, load) => total + driverPayForLoad(load), 0);
       const doc = new JsPdf({ orientation: 'portrait', unit: 'pt', format: 'letter' });
@@ -290,8 +333,8 @@ export default function AccountingPage() {
       doc.text('Period: ' + dateLabel(settlementFrom) + ' to ' + dateLabel(settlementTo), 40, 122);
       autoTable(doc, {
         startY: 142,
-        head: [['Load', 'Pickup date', 'Route', 'Gross rate', 'Dispatch fee', 'Carrier net', 'Driver pay']],
-        body: settlementLoads.map(load => [load.loadNumber, dateLabel(load.pickupDate), load.pickupState + ' to ' + load.deliveryState, money(load.rate), money(load.dispatchFeeAmount), money(load.carrierNet), money(driverPayForLoad(load))]),
+        head: [['Load', 'Pickup date', 'Route', 'Gross rate', 'Total fee', 'Carrier net', 'Driver pay']],
+        body: settlementLoads.map(load => [load.loadNumber, dateLabel(load.pickupDate), load.pickupState + ' to ' + load.deliveryState, money(load.rate), money(load.totalFeeAmount), money(load.carrierNet), money(driverPayForLoad(load))]),
         foot: [['', '', 'Totals', money(grossTotal), money(feeTotal), money(netTotal), money(driverPayTotal)]],
         headStyles: { fillColor: [30, 64, 175], textColor: [255, 255, 255], fontSize: 8.5 },
         footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' },
@@ -314,13 +357,6 @@ export default function AccountingPage() {
     return <div className="grid min-h-[60vh] place-items-center bg-slate-50"><Loader2 size={24} className="animate-spin text-blue-600" /></div>;
   }
 
-  const metrics = [
-    { label: 'Open receivables', value: money(receivables), Icon: Landmark },
-    { label: 'Cash collected', value: money(collected), Icon: WalletCards },
-    { label: 'Open payables', value: money(payables), Icon: ReceiptText },
-    { label: 'Carrier settlements', value: money(driverPay), Icon: ArrowRight },
-  ];
-
   return (
     <div data-tms-surface className="min-h-full bg-slate-50 text-slate-900">
       <header className="border-b border-slate-200 bg-white px-4 py-4 sm:px-6">
@@ -338,14 +374,7 @@ export default function AccountingPage() {
       </header>
 
       <main className="mx-auto max-w-[1600px] space-y-5 p-4 sm:p-6">
-        <section className="grid gap-px overflow-hidden border border-slate-200 bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
-          {metrics.map(({ label, value, Icon }) => (
-            <div key={label} className="flex items-center gap-3 bg-white px-4 py-3">
-              <Icon size={17} className="text-slate-400" />
-              <div><p className="font-mono text-base font-semibold text-slate-950">{value}</p><p className="text-[11px] font-medium text-slate-500">{label}</p></div>
-            </div>
-          ))}
-        </section>
+        <FinancialReportingOverview loads={data?.loads ?? []} isMcOwner={isMcOwner} />
 
         <section className="border border-slate-200 bg-white">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
@@ -430,7 +459,7 @@ export default function AccountingPage() {
 
         <section className="border border-slate-200 bg-white">
           <div className="border-b border-slate-200 px-4 py-3"><h2 className="text-sm font-semibold text-slate-900">Carrier settlements & driver pay</h2><p className="mt-0.5 text-xs text-slate-500">Issued settlement totals remain accessible beside invoice and payable operations.</p></div>
-          <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-xs"><thead className="bg-slate-50 text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-500"><tr><th className="px-4 py-3">Carrier</th><th className="px-4 py-3">Period</th><th className="px-4 py-3 text-right">Gross</th><th className="px-4 py-3 text-right">Dispatch fee</th><th className="px-4 py-3 text-right">Net settlement</th></tr></thead><tbody className="divide-y divide-slate-100">{(data?.settlements ?? []).map(settlement => <tr key={settlement.id} className="hover:bg-slate-50"><td className="px-4 py-3 font-medium text-slate-800">{carrierNames.get(settlement.carrierId) ?? 'Unknown carrier'}</td><td className="px-4 py-3 text-slate-600">{dateLabel(settlement.periodStart)} to {dateLabel(settlement.periodEnd)}</td><td className="px-4 py-3 text-right font-mono text-slate-700">{money(settlement.grossTotal)}</td><td className="px-4 py-3 text-right font-mono text-slate-700">{money(settlement.feeTotal)}</td><td className="px-4 py-3 text-right font-mono font-semibold text-slate-900">{money(settlement.netTotal)}</td></tr>)}{!(data?.settlements ?? []).length && <tr><td colSpan={5} className="px-4 py-10 text-center text-xs text-slate-400">No carrier settlements generated yet.</td></tr>}</tbody></table></div>
+          <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-xs"><thead className="bg-slate-50 text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-500"><tr><th className="px-4 py-3">Carrier</th><th className="px-4 py-3">Period</th><th className="px-4 py-3 text-right">Gross</th><th className="px-4 py-3 text-right">Total fee</th><th className="px-4 py-3 text-right">Net settlement</th></tr></thead><tbody className="divide-y divide-slate-100">{(data?.settlements ?? []).map(settlement => <tr key={settlement.id} className="hover:bg-slate-50"><td className="px-4 py-3 font-medium text-slate-800">{carrierNames.get(settlement.carrierId) ?? 'Unknown carrier'}</td><td className="px-4 py-3 text-slate-600">{dateLabel(settlement.periodStart)} to {dateLabel(settlement.periodEnd)}</td><td className="px-4 py-3 text-right font-mono text-slate-700">{money(settlement.grossTotal)}</td><td className="px-4 py-3 text-right font-mono text-slate-700">{money(settlement.feeTotal)}</td><td className="px-4 py-3 text-right font-mono font-semibold text-slate-900">{money(settlement.netTotal)}</td></tr>)}{!(data?.settlements ?? []).length && <tr><td colSpan={5} className="px-4 py-10 text-center text-xs text-slate-400">No carrier settlements generated yet.</td></tr>}</tbody></table></div>
         </section>
 
         <div className="grid gap-5 xl:grid-cols-2">

@@ -41,7 +41,7 @@ export type CheckinEvent =
   | 'breakdown'
   | 'accident';
 
-export type SonexRole = 'admin' | 'carrier';
+export type SonexRole = 'admin' | 'mc_owner' | 'carrier';
 
 // â”€â”€â”€ Core Entities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -84,6 +84,8 @@ export interface SonexCarrier {
   insuranceCompany?: string;
   insurancePolicyNumber?: string;
   // Business
+  mcOwnerId?: string;
+  totalFeePercent: number; // full carrier deduction; the MC owner receives the remainder after Sonex's dispatch fee
   dispatchFeePercent: number; // e.g. 10 = 10%
   status: CarrierStatus;
   notes: string;
@@ -98,6 +100,7 @@ export interface SonexLoad {
   id: string;
   loadNumber: string;    // e.g. SNX-2025-001
   carrierId: string;
+  mcOwnerId?: string;
   driverId?: string;
   equipmentId?: string;
   // Broker
@@ -130,8 +133,11 @@ export interface SonexLoad {
   miles: number;
   // Financials
   rate: number;                  // gross from broker (USD)
+  totalFeePercent: number;
+  totalFeeAmount: number;
   dispatchFeePercent: number;    // e.g. 10
   dispatchFeeAmount: number;     // auto-calculated
+  mcOwnerFeeAmount: number;
   carrierNet: number;            // auto-calculated
   ratePerMile: number;           // auto-calculated
   // Status
@@ -157,7 +163,7 @@ export interface SonexLoadCheckin {
   event: CheckinEvent;
   timestamp: string;  // ISO 8601
   notes: string;
-  loggedBy: 'admin' | 'carrier';
+  loggedBy: SonexRole;
 }
 
 export interface SonexCargoPhoto {
@@ -167,7 +173,7 @@ export interface SonexCargoPhoto {
   stage: 'pickup' | 'delivery';
   caption: string;
   uploadedAt: string;
-  uploadedBy: 'admin' | 'carrier';
+  uploadedBy: SonexRole;
 }
 
 export interface SonexSettlement {
@@ -190,7 +196,26 @@ export interface SonexUser {
   role: SonexRole;
   displayName: string;
   carrierId?: string;    // set for carrier role
+  mcOwnerId?: string;    // set for mc_owner role
   avatar: string;        // 2-letter initials
+  adminPreview?: boolean; // admin-authorized portal switch session
+}
+
+export interface SonexMcOwner {
+  id: string;
+  ownerName: string;
+  companyName: string;
+  email: string;
+  phone: string;
+  mcNumber: string;
+  dotNumber?: string;
+  canManageLeasedCarriers: boolean;
+  primaryCarrierId?: string;
+  defaultTotalFeePercent: number;
+  defaultDispatchFeePercent: number;
+  status: 'active' | 'inactive';
+  createdAt: string;
+  updatedAt: string;
 }
 
 // â”€â”€â”€ Settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -275,11 +300,15 @@ export const CHECKIN_EVENT_LABELS: Record<CheckinEvent, string> = {
   accident:         'Accident Reported',
 };
 
-export function computeLoadFinancials(rate: number, miles: number, feePercent: number) {
-  const dispatchFeeAmount = Math.round(rate * (feePercent / 100) * 100) / 100;
-  const carrierNet = Math.round((rate - dispatchFeeAmount) * 100) / 100;
+export function computeLoadFinancials(rate: number, miles: number, totalFeePercent: number, dispatchFeePercent: number) {
+  const boundedTotalFeePercent = Math.max(0, Math.min(100, totalFeePercent));
+  const boundedDispatchFeePercent = Math.max(0, Math.min(boundedTotalFeePercent, dispatchFeePercent));
+  const totalFeeAmount = Math.round(rate * (boundedTotalFeePercent / 100) * 100) / 100;
+  const dispatchFeeAmount = Math.round(rate * (boundedDispatchFeePercent / 100) * 100) / 100;
+  const mcOwnerFeeAmount = Math.round((totalFeeAmount - dispatchFeeAmount) * 100) / 100;
+  const carrierNet = Math.round((rate - totalFeeAmount) * 100) / 100;
   const ratePerMile = miles > 0 ? Math.round((rate / miles) * 100) / 100 : 0;
-  return { dispatchFeeAmount, carrierNet, ratePerMile };
+  return { totalFeeAmount, dispatchFeeAmount, mcOwnerFeeAmount, carrierNet, ratePerMile };
 }
 
 

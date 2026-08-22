@@ -1,6 +1,26 @@
 import { sqliteTable, text, integer, real, index } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
+// ─── 0. MC OWNERS TABLE ────────────────────────────────────────────────────────
+// An MC owner has one authority and may manage one or more leased carriers.
+export const mcOwners = sqliteTable('mc_owners', {
+  id: text('id').primaryKey(),
+  ownerName: text('owner_name').notNull(),
+  companyName: text('company_name').notNull(),
+  email: text('email').notNull(),
+  phone: text('phone').notNull(),
+  mcNumber: text('mc_number').unique().notNull(),
+  dotNumber: text('dot_number'),
+  canManageLeasedCarriers: integer('can_manage_leased_carriers', { mode: 'boolean' }).notNull().default(false),
+  // Deliberately not a database FK to avoid a circular SQLite table definition.
+  primaryCarrierId: text('primary_carrier_id'),
+  defaultTotalFeePercent: real('default_total_fee_percent').notNull().default(18),
+  defaultDispatchFeePercent: real('default_dispatch_fee_percent').notNull().default(8),
+  status: text('status').notNull().default('active'),
+  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 // ─── 1. CARRIERS TABLE ────────────────────────────────────────────────────────
 export const carriers = sqliteTable('carriers', {
   id: text('id').primaryKey(),
@@ -21,6 +41,9 @@ export const carriers = sqliteTable('carriers', {
   insuranceType: text('insurance_type').notNull(), // vin_scheduled, certificate_holder, additional_insured
   insuranceCompany: text('insurance_company'),
   insurancePolicyNumber: text('insurance_policy_number'),
+  mcOwnerId: text('mc_owner_id').references(() => mcOwners.id, { onDelete: 'set null' }),
+  // Total fee is the full deduction from broker gross. Dispatch fee is Sonex's portion.
+  totalFeePercent: real('total_fee_percent').notNull().default(10),
   dispatchFeePercent: real('dispatch_fee_percent').notNull().default(10),
   status: text('status').notNull().default('onboarding'), // active, inactive, onboarding
   notes: text('notes').notNull().default(''),
@@ -79,9 +102,10 @@ export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
   email: text('email').unique().notNull(),
   passwordHash: text('password_hash').notNull(), // single source of truth for credentials
-  role: text('role').notNull(), // admin, carrier
+  role: text('role').notNull(), // admin, mc_owner, carrier
   displayName: text('display_name').notNull(),
   carrierId: text('carrier_id').references(() => carriers.id, { onDelete: 'set null' }),
+  mcOwnerId: text('mc_owner_id').references(() => mcOwners.id, { onDelete: 'set null' }),
   avatar: text('avatar'),
   createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
@@ -99,6 +123,7 @@ export const loads = sqliteTable('loads', {
   id: text('id').primaryKey(),
   loadNumber: text('load_number').unique().notNull(),
   carrierId: text('carrier_id').notNull().references(() => carriers.id, { onDelete: 'no action' }), // block deletion if carrier has loads to preserve auditing
+  mcOwnerId: text('mc_owner_id').references(() => mcOwners.id, { onDelete: 'set null' }),
   driverId: text('driver_id').references(() => carrierDrivers.id, { onDelete: 'set null' }),
   equipmentId: text('equipment_id').references(() => carrierEquipment.id, { onDelete: 'set null' }),
   brokerName: text('broker_name').notNull(),
@@ -126,8 +151,11 @@ export const loads = sqliteTable('loads', {
   weight: integer('weight').notNull(),
   miles: real('miles').notNull(),
   rate: real('rate').notNull(),
+  totalFeePercent: real('total_fee_percent').notNull().default(10),
+  totalFeeAmount: real('total_fee_amount').notNull().default(0),
   dispatchFeePercent: real('dispatch_fee_percent').notNull(),
   dispatchFeeAmount: real('dispatch_fee_amount').notNull(),
+  mcOwnerFeeAmount: real('mc_owner_fee_amount').notNull().default(0),
   carrierNet: real('carrier_net').notNull(),
   ratePerMile: real('rate_per_mile').notNull(),
   status: text('status').notNull().default('booked'), // 10 lifecycle stages

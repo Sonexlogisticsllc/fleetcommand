@@ -3,7 +3,7 @@
 
 import { db } from '../db/client';
 import * as schema from '../db/schema';
-import { eq, desc, and, inArray, count, sum, avg, gte } from 'drizzle-orm';
+import { eq, desc, and, inArray, count, sum, avg } from 'drizzle-orm';
 import { hash } from '@node-rs/argon2';
 import crypto from 'crypto';
 import { getCurrentUserAction } from './authActions';
@@ -12,7 +12,7 @@ import { buildTodayActivity } from './dashboardActivity';
 
 import {
   SonexCarrier, SonexLoad, SonexLoadCheckin, SonexCargoPhoto,
-  SonexSettlement, SonexSettings, SonexUser,
+  SonexSettlement, SonexSettings, SonexUser, SonexMcOwner,
   computeLoadFinancials, LoadStatus, CheckinEvent,
 } from './sonexTypes';
 
@@ -28,10 +28,48 @@ async function requireAdminUser(): Promise<SonexUser> {
   return user;
 }
 
+type McOwnerScope = {
+  id: string;
+  canManageLeasedCarriers: boolean;
+  primaryCarrierId: string | null;
+};
+
+async function getMcOwnerScope(user: SonexUser): Promise<McOwnerScope> {
+  if (user.role !== 'mc_owner' || !user.mcOwnerId) {
+    throw new Error('MC owner authorization required.');
+  }
+  const [owner] = await db.select({
+    id: schema.mcOwners.id,
+    canManageLeasedCarriers: schema.mcOwners.canManageLeasedCarriers,
+    primaryCarrierId: schema.mcOwners.primaryCarrierId,
+  }).from(schema.mcOwners).where(eq(schema.mcOwners.id, user.mcOwnerId)).limit(1);
+  if (!owner || (!owner.canManageLeasedCarriers && !owner.primaryCarrierId)) {
+    throw new Error('This MC owner account is not configured with an accessible carrier.');
+  }
+  return owner;
+}
+
+async function requireWorkspaceUser(): Promise<SonexUser> {
+  const user = await requireUser();
+  if (user.role !== 'admin' && user.role !== 'mc_owner') {
+    throw new Error('Dispatcher or MC owner authorization required.');
+  }
+  return user;
+}
+
+async function canAccessCarrier(user: SonexUser, carrierId: string): Promise<boolean> {
+  if (user.role === 'admin') return true;
+  if (user.role === 'carrier') return user.carrierId === carrierId;
+  const scope = await getMcOwnerScope(user);
+  if (!scope.canManageLeasedCarriers) return scope.primaryCarrierId === carrierId;
+  const [carrier] = await db.select({ mcOwnerId: schema.carriers.mcOwnerId })
+    .from(schema.carriers).where(eq(schema.carriers.id, carrierId)).limit(1);
+  return carrier?.mcOwnerId === scope.id;
+}
+
 async function requireCarrierAccess(carrierId: string): Promise<SonexUser> {
   const user = await requireUser();
-  if (user.role === 'admin') return user;
-  if (user.role !== 'carrier' || user.carrierId !== carrierId) {
+  if (!await canAccessCarrier(user, carrierId)) {
     throw new Error('You do not have permission to access this carrier.');
   }
   return user;
@@ -41,7 +79,12 @@ async function requireLoadAccess(loadId: string) {
   const user = await requireUser();
   const [load] = await db.select().from(schema.loads).where(eq(schema.loads.id, loadId)).limit(1);
   if (!load) throw new Error('Load not found.');
-  if (user.role !== 'admin' && (user.role !== 'carrier' || user.carrierId !== load.carrierId)) {
+  const mcOwnerScope = user.role === 'mc_owner' ? await getMcOwnerScope(user) : null;
+  const hasAccess = user.role === 'admin'
+    || user.role === 'carrier' && user.carrierId === load.carrierId
+    || user.role === 'mc_owner' && Boolean(user.mcOwnerId) && user.mcOwnerId === load.mcOwnerId
+      && (mcOwnerScope?.canManageLeasedCarriers || mcOwnerScope?.primaryCarrierId === load.carrierId);
+  if (!hasAccess) {
     throw new Error('You do not have permission to access this load.');
   }
   return { user, load };
@@ -97,6 +140,8 @@ function mapDbCarrier(c: typeof schema.carriers.$inferSelect): SonexCarrier {
     insuranceType: c.insuranceType as any,
     insuranceCompany: c.insuranceCompany || undefined,
     insurancePolicyNumber: c.insurancePolicyNumber || undefined,
+    mcOwnerId: c.mcOwnerId || undefined,
+    totalFeePercent: Number(c.totalFeePercent),
     dispatchFeePercent: Number(c.dispatchFeePercent),
     status: c.status as any,
     notes: c.notes,
@@ -111,6 +156,7 @@ function mapDbLoad(l: typeof schema.loads.$inferSelect): SonexLoad {
     id: l.id,
     loadNumber: l.loadNumber,
     carrierId: l.carrierId,
+    mcOwnerId: l.mcOwnerId || undefined,
     driverId: l.driverId || undefined,
     equipmentId: l.equipmentId || undefined,
     brokerName: l.brokerName,
@@ -138,8 +184,11 @@ function mapDbLoad(l: typeof schema.loads.$inferSelect): SonexLoad {
     weight: l.weight,
     miles: Number(l.miles),
     rate: Number(l.rate),
+    totalFeePercent: Number(l.totalFeePercent),
+    totalFeeAmount: Number(l.totalFeeAmount),
     dispatchFeePercent: Number(l.dispatchFeePercent),
     dispatchFeeAmount: Number(l.dispatchFeeAmount),
+    mcOwnerFeeAmount: Number(l.mcOwnerFeeAmount),
     carrierNet: Number(l.carrierNet),
     ratePerMile: Number(l.ratePerMile),
     status: l.status as any,
@@ -160,13 +209,194 @@ function mapDbLoad(l: typeof schema.loads.$inferSelect): SonexLoad {
 
 export async function getCarriers(): Promise<SonexCarrier[]> {
   try {
-    await requireAdminUser();
-    const list = await db.select().from(schema.carriers).orderBy(desc(schema.carriers.joinedAt));
+    const user = await requireWorkspaceUser();
+    let list;
+    if (user.role === 'mc_owner') {
+      const scope = await getMcOwnerScope(user);
+      list = scope.canManageLeasedCarriers
+        ? await db.select().from(schema.carriers).where(eq(schema.carriers.mcOwnerId, scope.id)).orderBy(desc(schema.carriers.joinedAt))
+        : await db.select().from(schema.carriers).where(eq(schema.carriers.id, scope.primaryCarrierId!)).orderBy(desc(schema.carriers.joinedAt));
+    } else {
+      list = await db.select().from(schema.carriers).orderBy(desc(schema.carriers.joinedAt));
+    }
     return list.map(mapDbCarrier);
   } catch (err) {
     console.error('Error fetching carriers:', err);
     return [];
   }
+}
+
+function mapDbMcOwner(owner: typeof schema.mcOwners.$inferSelect): SonexMcOwner {
+  return {
+    id: owner.id,
+    ownerName: owner.ownerName,
+    companyName: owner.companyName,
+    email: owner.email,
+    phone: owner.phone,
+    mcNumber: owner.mcNumber,
+    dotNumber: owner.dotNumber || undefined,
+    canManageLeasedCarriers: owner.canManageLeasedCarriers,
+    primaryCarrierId: owner.primaryCarrierId || undefined,
+    defaultTotalFeePercent: Number(owner.defaultTotalFeePercent),
+    defaultDispatchFeePercent: Number(owner.defaultDispatchFeePercent),
+    status: owner.status as 'active' | 'inactive',
+    createdAt: owner.createdAt,
+    updatedAt: owner.updatedAt,
+  };
+}
+
+export async function getMcOwners(): Promise<SonexMcOwner[]> {
+  const user = await requireWorkspaceUser();
+  if (user.role === 'admin') {
+    return (await db.select().from(schema.mcOwners).orderBy(schema.mcOwners.ownerName)).map(mapDbMcOwner);
+  }
+  const scope = await getMcOwnerScope(user);
+  const rows = await db.select().from(schema.mcOwners).where(eq(schema.mcOwners.id, scope.id)).limit(1);
+  return rows.map(mapDbMcOwner);
+}
+
+export async function getMcOwner(id: string): Promise<SonexMcOwner | undefined> {
+  const user = await requireWorkspaceUser();
+  if (user.role === 'mc_owner' && user.mcOwnerId !== id) throw new Error('You do not have permission to access this MC owner.');
+  const [owner] = await db.select().from(schema.mcOwners).where(eq(schema.mcOwners.id, id)).limit(1);
+  return owner ? mapDbMcOwner(owner) : undefined;
+}
+
+export type McOwnerInput = Omit<SonexMcOwner, 'id' | 'createdAt' | 'updatedAt'> & {
+  portalPassword: string;
+};
+
+export async function addMcOwner(input: McOwnerInput): Promise<SonexMcOwner> {
+  await requireAdminUser();
+  if (!input.ownerName.trim() || !input.companyName.trim() || !input.mcNumber.trim() || !input.email.trim()) {
+    throw new Error('Owner name, company, MC number, and login email are required.');
+  }
+  if (input.portalPassword.length < 10) throw new Error('Use a password with at least 10 characters.');
+  if (input.defaultDispatchFeePercent < 0 || input.defaultTotalFeePercent < input.defaultDispatchFeePercent || input.defaultTotalFeePercent > 100) {
+    throw new Error('Total fee must be between the dispatch fee and 100%.');
+  }
+  if (!input.canManageLeasedCarriers && !input.primaryCarrierId) {
+    throw new Error('Select the primary carrier for an owner-operator account.');
+  }
+
+  const portalEmail = input.email.trim().toLowerCase();
+  const [existingAccount] = await db.select({ role: schema.users.role, displayName: schema.users.displayName })
+    .from(schema.users)
+    .where(eq(schema.users.email, portalEmail))
+    .limit(1);
+  if (existingAccount) {
+    const roleLabel = existingAccount.role === 'carrier' ? 'carrier portal' : existingAccount.role === 'mc_owner' ? 'MC owner portal' : 'admin portal';
+    throw new Error(`${portalEmail} is already assigned to ${existingAccount.displayName}'s ${roleLabel}. Use a different email for this MC owner portal.`);
+  }
+
+  const [existingMcOwner] = await db.select({ id: schema.mcOwners.id })
+    .from(schema.mcOwners)
+    .where(eq(schema.mcOwners.mcNumber, input.mcNumber.trim()))
+    .limit(1);
+  if (existingMcOwner) throw new Error('This MC number already has an owner portal.');
+
+  if (input.primaryCarrierId) {
+    const [primaryCarrier] = await db.select({ id: schema.carriers.id }).from(schema.carriers)
+      .where(eq(schema.carriers.id, input.primaryCarrierId)).limit(1);
+    if (!primaryCarrier) throw new Error('Selected primary carrier no longer exists.');
+  }
+
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await db.insert(schema.mcOwners).values({
+    id,
+    ownerName: input.ownerName.trim(),
+    companyName: input.companyName.trim(),
+    email: portalEmail,
+    phone: input.phone.trim(),
+    mcNumber: input.mcNumber.trim(),
+    dotNumber: input.dotNumber?.trim(),
+    canManageLeasedCarriers: input.canManageLeasedCarriers,
+    primaryCarrierId: input.primaryCarrierId,
+    defaultTotalFeePercent: input.defaultTotalFeePercent,
+    defaultDispatchFeePercent: input.defaultDispatchFeePercent,
+    status: input.status,
+    createdAt: now,
+    updatedAt: now,
+  });
+  try {
+    await db.insert(schema.users).values({
+      id: crypto.randomUUID(),
+      email: portalEmail,
+      passwordHash: await hash(input.portalPassword),
+      role: 'mc_owner',
+      displayName: input.ownerName.trim(),
+      mcOwnerId: id,
+      avatar: input.ownerName.trim().split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase(),
+    });
+    if (input.primaryCarrierId) {
+      await db.update(schema.carriers).set({
+        mcOwnerId: id,
+        isLeasedMC: true,
+        mcHolderName: input.companyName.trim(),
+        mcHolderMC: input.mcNumber.trim(),
+        totalFeePercent: input.defaultTotalFeePercent,
+        dispatchFeePercent: input.defaultDispatchFeePercent,
+        updatedAt: now,
+      }).where(eq(schema.carriers.id, input.primaryCarrierId));
+    }
+  } catch (error) {
+    await db.delete(schema.mcOwners).where(eq(schema.mcOwners.id, id));
+    throw error;
+  }
+  return (await getMcOwner(id))!;
+}
+
+export async function updateMcOwner(id: string, data: Partial<Omit<McOwnerInput, 'portalPassword'>>): Promise<SonexMcOwner> {
+  await requireAdminUser();
+  const [current] = await db.select().from(schema.mcOwners).where(eq(schema.mcOwners.id, id)).limit(1);
+  if (!current) throw new Error('MC owner not found.');
+  const totalFeePercent = data.defaultTotalFeePercent ?? Number(current.defaultTotalFeePercent);
+  const dispatchFeePercent = data.defaultDispatchFeePercent ?? Number(current.defaultDispatchFeePercent);
+  const canManageLeasedCarriers = data.canManageLeasedCarriers ?? current.canManageLeasedCarriers;
+  const primaryCarrierId = data.primaryCarrierId !== undefined ? data.primaryCarrierId || null : current.primaryCarrierId;
+  if (dispatchFeePercent < 0 || totalFeePercent < dispatchFeePercent || totalFeePercent > 100) {
+    throw new Error('Total fee must be between the dispatch fee and 100%.');
+  }
+  if (!canManageLeasedCarriers && !primaryCarrierId) {
+    throw new Error('Choose a primary carrier for an owner-operator authority.');
+  }
+  if (primaryCarrierId) {
+    const [primaryCarrier] = await db.select({ id: schema.carriers.id }).from(schema.carriers)
+      .where(eq(schema.carriers.id, primaryCarrierId)).limit(1);
+    if (!primaryCarrier) throw new Error('Selected primary carrier no longer exists.');
+  }
+  await db.update(schema.mcOwners).set({
+    ownerName: data.ownerName?.trim() ?? current.ownerName,
+    companyName: data.companyName?.trim() ?? current.companyName,
+    email: data.email?.trim().toLowerCase() ?? current.email,
+    phone: data.phone?.trim() ?? current.phone,
+    mcNumber: data.mcNumber?.trim() ?? current.mcNumber,
+    dotNumber: data.dotNumber?.trim() ?? current.dotNumber,
+    canManageLeasedCarriers,
+    primaryCarrierId,
+    defaultTotalFeePercent: totalFeePercent,
+    defaultDispatchFeePercent: dispatchFeePercent,
+    status: data.status ?? current.status,
+    updatedAt: new Date().toISOString(),
+  }).where(eq(schema.mcOwners.id, id));
+  if (primaryCarrierId) {
+    await db.update(schema.carriers).set({ mcOwnerId: id, updatedAt: new Date().toISOString() })
+      .where(eq(schema.carriers.id, primaryCarrierId));
+  }
+  return (await getMcOwner(id))!;
+}
+
+export async function resetMcOwnerPortalPassword(mcOwnerId: string, password: string): Promise<void> {
+  await requireAdminUser();
+  if (password.length < 10) throw new Error('Use a password with at least 10 characters.');
+  const [account] = await db.select({ id: schema.users.id })
+    .from(schema.users)
+    .where(and(eq(schema.users.mcOwnerId, mcOwnerId), eq(schema.users.role, 'mc_owner')))
+    .limit(1);
+  if (!account) throw new Error('MC owner portal account not found.');
+  await db.update(schema.users).set({ passwordHash: await hash(password), updatedAt: new Date().toISOString() })
+    .where(eq(schema.users.id, account.id));
 }
 
 export async function getCarrier(id: string): Promise<SonexCarrier | undefined> {
@@ -257,9 +487,22 @@ export async function addCarrier(
   data: Omit<SonexCarrier, 'id' | 'joinedAt' | 'updatedAt'> & { portalPassword?: string }
 ): Promise<SonexCarrier> {
   try {
-    await requireAdminUser();
+    const user = await requireUser();
+    if (user.role !== 'admin' && user.role !== 'mc_owner') throw new Error('Dispatcher or MC owner authorization required.');
+    const scope = user.role === 'mc_owner' ? await getMcOwnerScope(user) : null;
+    if (scope && !scope.canManageLeasedCarriers) throw new Error('This MC owner account cannot add leased carriers.');
     const { portalPassword, ...carrierData } = data as any;
     const carrierId = crypto.randomUUID();
+    const mcOwnerId = scope ? scope.id : carrierData.mcOwnerId || null;
+    let totalFeePercent = Number(carrierData.totalFeePercent ?? carrierData.dispatchFeePercent);
+    let dispatchFeePercent = Number(carrierData.dispatchFeePercent);
+    if (scope) {
+      totalFeePercent = Number((await getMcOwner(scope.id))!.defaultTotalFeePercent);
+      dispatchFeePercent = Number((await getMcOwner(scope.id))!.defaultDispatchFeePercent);
+    }
+    if (totalFeePercent < dispatchFeePercent || totalFeePercent > 100 || dispatchFeePercent < 0) {
+      throw new Error('Total fee must be between the dispatch fee and 100%.');
+    }
 
     await db.insert(schema.carriers).values({
       id: carrierId,
@@ -274,13 +517,15 @@ export async function addCarrier(
       hasOwnAuthority: carrierData.hasOwnAuthority,
       mcNumber: carrierData.mcNumber,
       dotNumber: carrierData.dotNumber,
-      isLeasedMC: carrierData.isLeasedMC,
+      isLeasedMC: Boolean(mcOwnerId) || carrierData.isLeasedMC,
       mcHolderName: carrierData.mcHolderName,
       mcHolderMC: carrierData.mcHolderMC,
       insuranceType: carrierData.insuranceType,
       insuranceCompany: carrierData.insuranceCompany,
       insurancePolicyNumber: carrierData.insurancePolicyNumber,
-      dispatchFeePercent: carrierData.dispatchFeePercent,
+      mcOwnerId,
+      totalFeePercent,
+      dispatchFeePercent,
       status: carrierData.status,
       notes: carrierData.notes,
       portalEmail: carrierData.portalEmail,
@@ -289,10 +534,19 @@ export async function addCarrier(
     // Create portal login if email + password provided
     if (carrierData.portalEmail && portalPassword) {
       const displayName = `${carrierData.firstName} ${carrierData.lastName}`;
-      const result = await createCarrierPortalUser(carrierId, carrierData.portalEmail, portalPassword, displayName);
-      if (!result.success) {
+      try {
+        await db.insert(schema.users).values({
+          id: crypto.randomUUID(),
+          email: carrierData.portalEmail.trim().toLowerCase(),
+          passwordHash: await hash(portalPassword),
+          role: 'carrier',
+          displayName,
+          carrierId,
+          avatar: displayName.split(' ').map((word: string) => word[0]).join('').slice(0, 2).toUpperCase(),
+        });
+      } catch (error: any) {
         await db.delete(schema.carriers).where(eq(schema.carriers.id, carrierId));
-        throw new Error(`Carrier login could not be created: ${result.error ?? 'Unknown error'}`);
+        throw new Error(`Carrier login could not be created: ${error?.message ?? 'Unknown error'}`);
       }
     }
 
@@ -317,6 +571,12 @@ export async function updateCarrier(id: string, data: Partial<SonexCarrier>): Pr
         state: data.state,
         zip: data.zip,
       };
+    } else if (user.role === 'mc_owner') {
+      const scope = await getMcOwnerScope(user);
+      if (!scope.canManageLeasedCarriers) throw new Error('This MC owner account cannot edit leased carriers.');
+      // Financial percentages and authority assignment are owned by Sonex Dispatch.
+      const { mcOwnerId, totalFeePercent, dispatchFeePercent, ...allowed } = data;
+      data = allowed;
     }
     const updateData: any = {};
     if (data.firstName !== undefined) updateData.firstName = data.firstName;
@@ -336,7 +596,9 @@ export async function updateCarrier(id: string, data: Partial<SonexCarrier>): Pr
     if (data.insuranceType !== undefined) updateData.insuranceType = data.insuranceType;
     if (data.insuranceCompany !== undefined) updateData.insuranceCompany = data.insuranceCompany;
     if (data.insurancePolicyNumber !== undefined) updateData.insurancePolicyNumber = data.insurancePolicyNumber;
-    if (data.dispatchFeePercent !== undefined) updateData.dispatchFeePercent = data.dispatchFeePercent;
+    if (user.role === 'admin' && data.mcOwnerId !== undefined) updateData.mcOwnerId = data.mcOwnerId || null;
+    if (user.role === 'admin' && data.totalFeePercent !== undefined) updateData.totalFeePercent = data.totalFeePercent;
+    if (user.role === 'admin' && data.dispatchFeePercent !== undefined) updateData.dispatchFeePercent = data.dispatchFeePercent;
     if (data.status !== undefined) updateData.status = data.status;
     if (data.notes !== undefined) updateData.notes = data.notes;
     if (data.portalEmail !== undefined) updateData.portalEmail = data.portalEmail;
@@ -350,10 +612,29 @@ export async function updateCarrier(id: string, data: Partial<SonexCarrier>): Pr
   }
 }
 
-export async function deleteCarrier(id: string): Promise<void> {
+export type DeleteCarrierResult = { disposition: 'deleted' | 'archived' };
+
+export async function deleteCarrier(id: string): Promise<DeleteCarrierResult> {
   try {
-    await requireAdminUser();
+    const user = await requireCarrierAccess(id);
+    if (user.role === 'mc_owner' && !(await getMcOwnerScope(user)).canManageLeasedCarriers) {
+      throw new Error('This MC owner account cannot remove leased carriers.');
+    }
+    if (user.role === 'carrier') throw new Error('Carrier accounts cannot delete carrier profiles.');
+    const [loadReference] = await db.select({ id: schema.loads.id }).from(schema.loads)
+      .where(eq(schema.loads.carrierId, id)).limit(1);
+
+    // Removing the portal login revokes access even when the profile must be retained for historical loads.
+    await db.delete(schema.users).where(and(eq(schema.users.carrierId, id), eq(schema.users.role, 'carrier')));
+
+    if (loadReference) {
+      await db.update(schema.carriers).set({ status: 'inactive', updatedAt: new Date().toISOString() })
+        .where(eq(schema.carriers.id, id));
+      return { disposition: 'archived' };
+    }
+
     await db.delete(schema.carriers).where(eq(schema.carriers.id, id));
+    return { disposition: 'deleted' };
   } catch (err) {
     console.error('Error deleting carrier:', err);
     throw err;
@@ -364,8 +645,16 @@ export async function deleteCarrier(id: string): Promise<void> {
 
 export async function getLoads(): Promise<SonexLoad[]> {
   try {
-    await requireAdminUser();
-    const list = await db.select().from(schema.loads).orderBy(desc(schema.loads.createdAt));
+    const user = await requireWorkspaceUser();
+    let list;
+    if (user.role === 'mc_owner') {
+      const scope = await getMcOwnerScope(user);
+      list = scope.canManageLeasedCarriers
+        ? await db.select().from(schema.loads).where(eq(schema.loads.mcOwnerId, scope.id)).orderBy(desc(schema.loads.createdAt))
+        : await db.select().from(schema.loads).where(and(eq(schema.loads.mcOwnerId, scope.id), eq(schema.loads.carrierId, scope.primaryCarrierId!))).orderBy(desc(schema.loads.createdAt));
+    } else {
+      list = await db.select().from(schema.loads).orderBy(desc(schema.loads.createdAt));
+    }
     return list.map(mapDbLoad);
   } catch (err) {
     console.error('Error fetching loads:', err);
@@ -385,8 +674,10 @@ export async function getLoad(id: string): Promise<SonexLoad | undefined> {
 
 export async function getLoadsByCarrier(carrierId: string): Promise<SonexLoad[]> {
   try {
-    await requireCarrierAccess(carrierId);
-    const list = await db.select().from(schema.loads).where(eq(schema.loads.carrierId, carrierId)).orderBy(desc(schema.loads.createdAt));
+    const user = await requireCarrierAccess(carrierId);
+    const list = user.role === 'mc_owner'
+      ? await db.select().from(schema.loads).where(and(eq(schema.loads.carrierId, carrierId), eq(schema.loads.mcOwnerId, user.mcOwnerId!))).orderBy(desc(schema.loads.createdAt))
+      : await db.select().from(schema.loads).where(eq(schema.loads.carrierId, carrierId)).orderBy(desc(schema.loads.createdAt));
     return list.map(mapDbLoad);
   } catch (err) {
     console.error('Error fetching loads by carrier:', err);
@@ -395,17 +686,28 @@ export async function getLoadsByCarrier(carrierId: string): Promise<SonexLoad[]>
 }
 
 export async function addLoad(
-  data: Omit<SonexLoad, 'id' | 'loadNumber' | 'dispatchFeeAmount' | 'carrierNet' | 'ratePerMile' | 'createdAt' | 'updatedAt' | 'freeTimeMinutes' | 'detentionHours' | 'detentionRate' | 'detentionRevenue'> & {
+  data: Omit<SonexLoad, 'id' | 'loadNumber' | 'totalFeeAmount' | 'dispatchFeeAmount' | 'mcOwnerFeeAmount' | 'carrierNet' | 'ratePerMile' | 'createdAt' | 'updatedAt' | 'freeTimeMinutes' | 'detentionHours' | 'detentionRate' | 'detentionRevenue'> & {
     freeTimeMinutes?: number;
     detentionRate?: number;
   }
 ): Promise<SonexLoad> {
   try {
     const user = await requireUser();
-    if (user.role !== 'admin' && (user.role !== 'carrier' || user.carrierId !== data.carrierId)) {
+    if (!await canAccessCarrier(user, data.carrierId)) {
       throw new Error('You do not have permission to create a load for this carrier.');
     }
-    const { dispatchFeeAmount, carrierNet, ratePerMile } = await computeLoadFinancials(data.rate, data.miles, data.dispatchFeePercent);
+    const [carrier] = await db.select().from(schema.carriers).where(eq(schema.carriers.id, data.carrierId)).limit(1);
+    if (!carrier) throw new Error('Carrier not found.');
+    const totalFeePercent = user.role === 'admin'
+      ? Number(data.totalFeePercent ?? carrier.totalFeePercent)
+      : Number(carrier.totalFeePercent);
+    const dispatchFeePercent = user.role === 'admin'
+      ? Number(data.dispatchFeePercent ?? carrier.dispatchFeePercent)
+      : Number(carrier.dispatchFeePercent);
+    const mcOwnerId = carrier.mcOwnerId || null;
+    const { totalFeeAmount, dispatchFeeAmount, mcOwnerFeeAmount, carrierNet, ratePerMile } = computeLoadFinancials(
+      data.rate, data.miles, totalFeePercent, dispatchFeePercent,
+    );
     const existing = (await db.select().from(schema.loads)).map(mapDbLoad);
     const loadNumber = await generateLoadNumber(existing);
     const id = crypto.randomUUID();
@@ -435,6 +737,7 @@ export async function addLoad(
       id,
       loadNumber,
       carrierId: data.carrierId,
+      mcOwnerId,
       driverId,
       equipmentId,
       brokerName: data.brokerName,
@@ -462,8 +765,11 @@ export async function addLoad(
       weight: data.weight,
       miles: data.miles,
       rate: data.rate,
-      dispatchFeePercent: data.dispatchFeePercent,
+      totalFeePercent,
+      totalFeeAmount,
+      dispatchFeePercent,
       dispatchFeeAmount,
+      mcOwnerFeeAmount,
       carrierNet,
       ratePerMile,
       status: data.status,
@@ -489,19 +795,42 @@ export async function updateLoad(id: string, data: Partial<SonexLoad>): Promise<
     const access = await requireLoadAccess(id);
     const current = mapDbLoad(access.load);
     const isAdmin = access.user.role === 'admin';
-    if (!isAdmin) {
+    const isMcOwner = access.user.role === 'mc_owner';
+    if (!isAdmin && !isMcOwner) {
       const carrierFields = new Set(['status', 'bolUrl', 'podUrl']);
       const forbidden = Object.keys(data).filter(key => !carrierFields.has(key));
       if (forbidden.length) throw new Error('Carriers can update status, BOL, and POD fields only.');
     }
 
     const updated = { ...current, ...data };
+
+    if (isAdmin && data.carrierId !== undefined && data.carrierId !== current.carrierId) {
+      const [assignedCarrier] = await db.select().from(schema.carriers).where(eq(schema.carriers.id, data.carrierId)).limit(1);
+      if (!assignedCarrier) throw new Error('Selected carrier no longer exists.');
+      updated.mcOwnerId = assignedCarrier.mcOwnerId || undefined;
+      if (data.totalFeePercent === undefined) updated.totalFeePercent = Number(assignedCarrier.totalFeePercent);
+      if (data.dispatchFeePercent === undefined) updated.dispatchFeePercent = Number(assignedCarrier.dispatchFeePercent);
+    }
     
-    if (data.rate !== undefined || data.miles !== undefined || data.dispatchFeePercent !== undefined) {
-      const { dispatchFeeAmount, carrierNet, ratePerMile } = await computeLoadFinancials(
-        updated.rate, updated.miles, updated.dispatchFeePercent
+    if (isMcOwner) {
+      // MC owners can edit operational load fields, never commercial splits or carrier assignment.
+      updated.carrierId = current.carrierId;
+      updated.mcOwnerId = current.mcOwnerId;
+      updated.totalFeePercent = current.totalFeePercent;
+      updated.dispatchFeePercent = current.dispatchFeePercent;
+      updated.totalFeeAmount = current.totalFeeAmount;
+      updated.dispatchFeeAmount = current.dispatchFeeAmount;
+      updated.mcOwnerFeeAmount = current.mcOwnerFeeAmount;
+      updated.carrierNet = current.carrierNet;
+    }
+
+    if (data.rate !== undefined || data.miles !== undefined || (isAdmin && (data.totalFeePercent !== undefined || data.dispatchFeePercent !== undefined))) {
+      const { totalFeeAmount, dispatchFeeAmount, mcOwnerFeeAmount, carrierNet, ratePerMile } = computeLoadFinancials(
+        updated.rate, updated.miles, updated.totalFeePercent, updated.dispatchFeePercent
       );
+      updated.totalFeeAmount = totalFeeAmount;
       updated.dispatchFeeAmount = dispatchFeeAmount;
+      updated.mcOwnerFeeAmount = mcOwnerFeeAmount;
       updated.carrierNet = carrierNet;
       updated.ratePerMile = ratePerMile;
     }
@@ -547,6 +876,7 @@ export async function updateLoad(id: string, data: Partial<SonexLoad>): Promise<
 
     const updateData: any = {
       carrierId: updated.carrierId || null,
+      mcOwnerId: updated.mcOwnerId || null,
       brokerName: updated.brokerName,
       brokerContact: updated.brokerContact,
       brokerPhone: updated.brokerPhone,
@@ -572,8 +902,11 @@ export async function updateLoad(id: string, data: Partial<SonexLoad>): Promise<
       weight: updated.weight,
       miles: updated.miles,
       rate: updated.rate,
+      totalFeePercent: updated.totalFeePercent,
+      totalFeeAmount: updated.totalFeeAmount,
       dispatchFeePercent: updated.dispatchFeePercent,
       dispatchFeeAmount: updated.dispatchFeeAmount,
+      mcOwnerFeeAmount: updated.mcOwnerFeeAmount,
       carrierNet: updated.carrierNet,
       ratePerMile: updated.ratePerMile,
       status: updated.status,
@@ -598,7 +931,8 @@ export async function updateLoad(id: string, data: Partial<SonexLoad>): Promise<
 
 export async function deleteLoad(id: string): Promise<void> {
   try {
-    await requireAdminUser();
+    const access = await requireLoadAccess(id);
+    if (access.user.role === 'carrier') throw new Error('Carrier accounts cannot delete loads.');
     await db.delete(schema.loads).where(eq(schema.loads.id, id));
   } catch (err) {
     console.error('Error deleting load:', err);
@@ -812,11 +1146,15 @@ export async function addCargoPhoto(data: Omit<SonexCargoPhoto, 'id'>): Promise<
 
 export async function getSettlements(carrierId?: string): Promise<SonexSettlement[]> {
   try {
-    if (carrierId) await requireCarrierAccess(carrierId);
-    else await requireAdminUser();
+    const user = carrierId ? await requireCarrierAccess(carrierId) : await requireWorkspaceUser();
     let list;
     if (carrierId) {
       list = await db.select().from(schema.settlements).where(eq(schema.settlements.carrierId, carrierId)).orderBy(desc(schema.settlements.generatedAt));
+    } else if (user.role === 'mc_owner') {
+      const scopedCarrierIds = (await getCarriers()).map(carrier => carrier.id);
+      list = scopedCarrierIds.length
+        ? await db.select().from(schema.settlements).where(inArray(schema.settlements.carrierId, scopedCarrierIds)).orderBy(desc(schema.settlements.generatedAt))
+        : [];
     } else {
       list = await db.select().from(schema.settlements).orderBy(desc(schema.settlements.generatedAt));
     }
@@ -839,7 +1177,8 @@ export async function getSettlements(carrierId?: string): Promise<SonexSettlemen
 
 export async function addSettlement(data: Omit<SonexSettlement, 'id'>): Promise<SonexSettlement> {
   try {
-    await requireAdminUser();
+    const user = await requireCarrierAccess(data.carrierId);
+    if (user.role === 'carrier') throw new Error('Carrier accounts cannot create settlements.');
     const id = crypto.randomUUID();
     const loadIdsStr = data.loadIds.join(',');
 
@@ -967,7 +1306,7 @@ export async function getCarrierStats(carrierId: string): Promise<CarrierStats> 
     
     const [lifetimeRes] = await db.select({
       gross: sum(schema.loads.rate),
-      fees: sum(schema.loads.dispatchFeeAmount),
+      fees: sum(schema.loads.totalFeeAmount),
       avgRpm: avg(schema.loads.ratePerMile)
     }).from(schema.loads).where(and(eq(schema.loads.carrierId, carrierId), inArray(schema.loads.status, ['delivered', 'pod_received', 'invoiced', 'paid'])));
 
@@ -1009,46 +1348,9 @@ export interface DashboardStats {
 
 export async function getDashboardStats(): Promise<DashboardStats> {
   try {
-    await requireAdminUser();
-    const now = new Date();
-    const dayOfWeek = now.getDay();
-    
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-    weekStart.setHours(0, 0, 0, 0);
-    const weekStartStr = weekStart.toISOString();
-
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthStartStr = monthStart.toISOString();
-
-    const [carriersRes] = await db.select({ count: count() }).from(schema.carriers).where(eq(schema.carriers.status, 'active'));
-    const [inProgressRes] = await db.select({ count: count() }).from(schema.loads).where(inArray(schema.loads.status, ['booked', 'dispatched', 'in_transit']));
-    const [weekCompletedRes] = await db.select({ count: count() }).from(schema.loads).where(and(
-      inArray(schema.loads.status, ['delivered', 'pod_received', 'invoiced', 'paid']),
-      gte(schema.loads.updatedAt, weekStartStr)
-    ));
-
-    const [monthCompletedRes] = await db.select({
-      gross: sum(schema.loads.rate),
-      fees: sum(schema.loads.dispatchFeeAmount),
-      avgRpm: avg(schema.loads.ratePerMile)
-    }).from(schema.loads).where(and(
-      inArray(schema.loads.status, ['delivered', 'pod_received', 'invoiced', 'paid']),
-      gte(schema.loads.updatedAt, monthStartStr)
-    ));
-
-    const grossThisMonth = Number(monthCompletedRes?.gross || 0);
-    const feesThisMonth = Number(monthCompletedRes?.fees || 0);
-    const avgRpmThisMonth = Number(monthCompletedRes?.avgRpm || 0);
-
-    return {
-      activeCarriers: carriersRes?.count || 0,
-      loadsInProgress: inProgressRes?.count || 0,
-      loadsCompletedThisWeek: weekCompletedRes?.count || 0,
-      grossThisMonth: Math.round(grossThisMonth * 100) / 100,
-      feesThisMonth: Math.round(feesThisMonth * 100) / 100,
-      avgRPMThisMonth: Math.round(avgRpmThisMonth * 100) / 100,
-    };
+    await requireWorkspaceUser();
+    const [scopedLoads, scopedCarriers] = await Promise.all([getLoads(), getCarriers()]);
+    return getDashboardStatsInMemory(scopedLoads, scopedCarriers);
   } catch (err) {
     console.error('Error getting dashboard stats:', err);
     return {
@@ -1063,7 +1365,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 }
 
 export async function getTodayActivity(): Promise<{ pickups: SonexLoad[]; deliveries: SonexLoad[] }> {
-  await requireAdminUser();
+  await requireWorkspaceUser();
   const loads = await getLoads();
   return buildTodayActivity(loads);
 }
@@ -1145,7 +1447,7 @@ function buildWeeklyDataServer(loads: SonexLoad[]) {
 
 export async function getDashboardCombinedData() {
   try {
-    await requireAdminUser();
+    await requireWorkspaceUser();
     const [loads, carriers] = await Promise.all([
       getLoads(),
       getCarriers(),
@@ -1192,7 +1494,13 @@ export async function getDashboardCombinedData() {
 // â”€â”€â”€ CSV Export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function exportLoadsCSV(loads: SonexLoad[], carriers: SonexCarrier[]): Promise<string> {
-  await requireAdminUser();
+  const user = await requireWorkspaceUser();
+  if (user.role === 'mc_owner') {
+    const permittedCarrierIds = new Set((await getCarriers()).map(carrier => carrier.id));
+    if (loads.some(load => !permittedCarrierIds.has(load.carrierId)) || carriers.some(carrier => !permittedCarrierIds.has(carrier.id))) {
+      throw new Error('Export contains records outside your MC authority.');
+    }
+  }
   const carrierMap = new Map(carriers.map(c => [c.id, `${c.firstName} ${c.lastName}`]));
   const headers = [
     'Load #', 'Date', 'Carrier', 'Broker', 'Pickup State', 'Delivery State',

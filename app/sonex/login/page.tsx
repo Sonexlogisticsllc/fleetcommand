@@ -17,7 +17,7 @@ export default function SonexLoginPage() {
 
   useEffect(() => {
     if (!isAuthenticated || !user) return;
-    router.replace(user.role === 'admin' ? '/sonex' : '/carrier');
+    router.replace(user.role === 'carrier' ? '/carrier' : '/sonex');
   }, [isAuthenticated, router, user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -34,7 +34,7 @@ export default function SonexLoginPage() {
     }
 
     toast.success('Welcome back');
-    router.replace(result.user.role === 'admin' ? '/sonex' : '/carrier');
+    router.replace(result.user.role === 'carrier' ? '/carrier' : '/sonex');
   };
 
   return (

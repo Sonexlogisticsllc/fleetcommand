@@ -106,7 +106,8 @@ function NewLoadModal({ carriers, onClose, onSaved, onAiParse }: NewLoadModalPro
 
   const selectedCarrier = carriers.find(c => c.id === form.carrierId);
   const feePercent = selectedCarrier?.dispatchFeePercent ?? 10;
-  const financials = computeLoadFinancials(form.rate, form.miles, feePercent);
+  const totalFeePercent = selectedCarrier?.totalFeePercent ?? feePercent;
+  const financials = computeLoadFinancials(form.rate, form.miles, totalFeePercent, feePercent);
 
   const set = (k: string, v: unknown) => setForm(f => ({ ...f, [k]: v }));
 
@@ -117,6 +118,7 @@ function NewLoadModal({ carriers, onClose, onSaved, onAiParse }: NewLoadModalPro
     }
     const created = await addLoad({
       ...form,
+      totalFeePercent,
       dispatchFeePercent: feePercent,
       ratConUrl: undefined,
       bolUrl: undefined,
@@ -201,7 +203,7 @@ function NewLoadModal({ carriers, onClose, onSaved, onAiParse }: NewLoadModalPro
               <option value="">Select carrier</option>
               {carriers.filter(c => c.status === 'active').map(c => (
                 <option key={c.id} value={c.id}>
-                  {c.firstName} {c.lastName} — {EQUIPMENT_TYPE_LABELS[c.equipmentType]} ({c.dispatchFeePercent}% fee)
+                  {c.firstName} {c.lastName} — {c.mcHolderName ? `${c.mcHolderName} / MC ${c.mcHolderMC ?? 'pending'}` : c.hasOwnAuthority ? `MC ${c.mcNumber ?? 'pending'}` : 'Direct carrier'}
                 </option>
               ))}
             </select>
@@ -410,8 +412,7 @@ export default function LoadsPage() {
 
     try {
       const selectedCarrier = carriers.find(c => c.id === carrierId);
-      const fee = selectedCarrier?.dispatchFeePercent ?? 10;
-      await updateLoad(loadId, { carrierId, dispatchFeePercent: fee });
+      await updateLoad(loadId, { carrierId });
       toast.success(`✓ Load successfully assigned to carrier!`);
       setQuickAssignLoads(prev => {
         const next = { ...prev };
@@ -467,6 +468,7 @@ export default function LoadsPage() {
         ...loadData,
         carrierId: parsedCarrierId,
         status: 'booked',
+        totalFeePercent: carriers.find(carrier => carrier.id === parsedCarrierId)?.totalFeePercent ?? 10,
         dispatchFeePercent: 10,
         ratConUrl: undefined,
         bolUrl: undefined,
@@ -742,8 +744,7 @@ export default function LoadsPage() {
                         <select
                           onChange={e => {
                             if (e.target.value) {
-                              const fee = carriers.find(c => c.id === e.target.value)?.dispatchFeePercent ?? 10;
-                              updateLoad(load.id, { carrierId: e.target.value, dispatchFeePercent: fee }).then(() => {
+                              updateLoad(load.id, { carrierId: e.target.value }).then(() => {
                                 toast.success('✓ Load assigned!');
                                 reloadData();
                               });
@@ -754,7 +755,7 @@ export default function LoadsPage() {
                           <option value="">-- Assign Carrier --</option>
                           {activeCarriers.map(ac => (
                             <option key={ac.id} value={ac.id}>
-                              {ac.firstName} {ac.lastName}
+                              {ac.firstName} {ac.lastName} · {ac.mcHolderMC ? `MC ${ac.mcHolderMC}` : ac.mcNumber ? `MC ${ac.mcNumber}` : 'Direct'}
                             </option>
                           ))}
                         </select>
