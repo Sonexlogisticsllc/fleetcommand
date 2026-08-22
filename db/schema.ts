@@ -67,7 +67,9 @@ export const carrierDrivers = sqliteTable('carrier_drivers', {
   status: text('status').notNull().default('active'), // active, inactive
   createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
-});
+}, (table) => ({
+  carrierStatusIdx: index('driver_carrier_status_idx').on(table.carrierId, table.status),
+}));
 
 export const driverPayProfiles = sqliteTable('driver_pay_profiles', {
   driverId: text('driver_id').primaryKey().references(() => carrierDrivers.id, { onDelete: 'cascade' }),
@@ -95,7 +97,9 @@ export const carrierEquipment = sqliteTable('carrier_equipment', {
   status: text('status').notNull().default('active'), // active, inactive
   createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
-});
+}, (table) => ({
+  carrierStatusIdx: index('equipment_carrier_status_idx').on(table.carrierId, table.status),
+}));
 
 // ─── 4. USERS (PROFILES) TABLE ────────────────────────────────────────────────
 export const users = sqliteTable('users', {
@@ -116,7 +120,9 @@ export const sessions = sqliteTable('sessions', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   expiresAt: integer('expires_at').notNull(),
-});
+}, (table) => ({
+  userIdx: index('session_user_idx').on(table.userId),
+}));
 
 // ─── 6. LOADS TABLE ───────────────────────────────────────────────────────────
 export const loads = sqliteTable('loads', {
@@ -169,7 +175,11 @@ export const loads = sqliteTable('loads', {
   detentionRevenue: real('detention_revenue').notNull().default(0),
   createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
-});
+}, (table) => ({
+  carrierDeliveryIdx: index('load_carrier_delivery_idx').on(table.carrierId, table.deliveryDate),
+  statusDeliveryIdx: index('load_status_delivery_idx').on(table.status, table.deliveryDate),
+  mcOwnerDeliveryIdx: index('load_mc_owner_delivery_idx').on(table.mcOwnerId, table.deliveryDate),
+}));
 
 // ─── 7. LOAD CHECK-INS TABLE ──────────────────────────────────────────────────
 // Dispatch ownership is deliberately separate from the commercial load record.
@@ -189,7 +199,9 @@ export const loadCheckins = sqliteTable('load_checkins', {
   timestamp: text('timestamp').notNull().default(sql`CURRENT_TIMESTAMP`),
   notes: text('notes').notNull().default(''),
   loggedBy: text('logged_by').notNull(), // admin, carrier
-});
+}, (table) => ({
+  loadTimestampIdx: index('checkin_load_timestamp_idx').on(table.loadId, table.timestamp),
+}));
 
 // ─── 8. CARGO PHOTOS TABLE ────────────────────────────────────────────────────
 export const cargoPhotos = sqliteTable('cargo_photos', {
@@ -200,7 +212,9 @@ export const cargoPhotos = sqliteTable('cargo_photos', {
   caption: text('caption').notNull().default(''),
   uploadedAt: text('uploaded_at').notNull().default(sql`CURRENT_TIMESTAMP`),
   uploadedBy: text('uploaded_by').notNull(), // admin, carrier
-});
+}, (table) => ({
+  loadUploadedIdx: index('cargo_photo_load_uploaded_idx').on(table.loadId, table.uploadedAt),
+}));
 
 // ─── 9. CARRIER DOCUMENTS TABLE ────────────────────────────────────────────────
 // ─── 10. SETTLEMENTS TABLE ────────────────────────────────────────────────────

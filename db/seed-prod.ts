@@ -6,7 +6,8 @@ async function main() {
   console.log('🌱 Seeding production database (clean structure only)...');
 
   console.log('Hashing admin password...');
-  const adminPassword = process.env.TURSO_ADMIN_PASSWORD || 'SonexProd2026Secure!';
+  const adminPassword = process.env.TURSO_ADMIN_PASSWORD;
+  if (!adminPassword) throw new Error('TURSO_ADMIN_PASSWORD is required to seed the production administrator.');
   const adminPasswordHash = await hash(adminPassword); // Admin password
 
   // 1. Settings

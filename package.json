@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:vercel": "node scripts/migrate-turso.mjs && node scripts/bootstrap-carrier-test-load.mjs && node scripts/qa-r2-probe.mjs && next build --no-lint",
+    "build:vercel": "node scripts/migrate-turso.mjs && node scripts/bootstrap-carrier-test-load.mjs && node scripts/qa-r2-probe.mjs && next build",
     "db:migrate:production": "node scripts/migrate-turso.mjs",
     "qa:seed:local": "node scripts/seed-local-qa.mjs",
     "qa:storage:local": "tsx scripts/qa-local-storage.ts",
@@ -13,7 +13,7 @@
     "qa:dashboard": "tsx scripts/qa-dashboard-activity.ts",
     "qa:extraction": "tsx scripts/qa-document-extraction.ts",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint ."
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1079.0",
@@ -27,7 +27,7 @@
     "jspdf-autotable": "^5.0.8",
     "lucia": "^3.2.2",
     "lucide-react": "^1.8.0",
-    "next": "14.2.35",
+    "next": "^16.3.2",
     "pdf-parse": "^2.4.5",
     "react": "^18",
     "react-dom": "^18",
@@ -38,12 +38,17 @@
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
-    "drizzle-kit": "^0.31.10",
-    "eslint": "^8",
-    "eslint-config-next": "14.2.35",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.2",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "tsx": "^4.23.12",
     "typescript": "^5"
+  },
+  "overrides": {
+    "@esbuild-kit/core-utils": {
+      "esbuild": "^0.25.12"
+    },
+    "brace-expansion": "^1.1.18"
   }
 }

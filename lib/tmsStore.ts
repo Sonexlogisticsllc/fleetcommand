@@ -1,7 +1,7 @@
 'use server';
 
 import crypto from 'crypto';
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lte } from 'drizzle-orm';
 import { db } from '@/db/client';
 import * as schema from '@/db/schema';
 import { getCarriers, getLoads, getSettlements } from '@/lib/sonexStore';
@@ -221,6 +221,7 @@ export async function getAccountingWorkspaceData() {
 }
 
 export async function createInvoiceForLoad(loadId: string) {
+  await requireAdmin();
   const load = await requireScopedLoad(loadId);
   if (!load) throw new Error('Load not found.');
   if (!['delivered', 'pod_received', 'invoiced', 'paid'].includes(load.status)) {
@@ -229,9 +230,8 @@ export async function createInvoiceForLoad(loadId: string) {
   const existing = await db.query.invoices.findFirst({ where: eq(schema.invoices.loadId, loadId) });
   if (existing) return existing.id;
 
-  const invoiceCount = await db.select().from(schema.invoices);
   const invoiceId = crypto.randomUUID();
-  const invoiceNumber = 'SNX-' + new Date().getFullYear() + '-' + String(invoiceCount.length + 1).padStart(4, '0');
+  const invoiceNumber = 'SNX-' + new Date().getFullYear() + '-' + crypto.randomUUID().slice(0, 8).toUpperCase();
   await db.insert(schema.invoices).values({
     id: invoiceId,
     invoiceNumber,
@@ -248,7 +248,7 @@ export async function createInvoiceForLoad(loadId: string) {
 }
 
 export async function setInvoiceStatus(invoiceId: string, status: 'draft' | 'sent' | 'paid') {
-  await requireWorkspace();
+  await requireAdmin();
   const invoice = await db.query.invoices.findFirst({ where: eq(schema.invoices.id, invoiceId) });
   if (!invoice) throw new Error('Invoice not found.');
   await requireScopedLoad(invoice.loadId);
@@ -276,7 +276,7 @@ export async function addLoadExpense(input: {
   vendorName?: string;
   notes?: string;
 }) {
-  await requireWorkspace();
+  await requireAdmin();
   if (!input.category.trim() || !Number.isFinite(input.amount) || input.amount <= 0) {
     throw new Error('Enter a valid payable expense.');
   }
@@ -303,21 +303,54 @@ export async function recordCarrierSettlement(input: {
   feeTotal: number;
   netTotal: number;
 }) {
-  await requireWorkspace();
+  await requireAdmin();
   if (!(await getCarriers()).some(carrier => carrier.id === input.carrierId)) {
     throw new Error('You do not have permission to settle this carrier.');
   }
-  if (!input.loadIds.length) throw new Error('A settlement needs at least one load.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.periodStart) || !/^\d{4}-\d{2}-\d{2}$/.test(input.periodEnd) || input.periodStart > input.periodEnd) {
+    throw new Error('Choose a valid settlement period.');
+  }
+  const requestedLoadIds = Array.from(new Set(input.loadIds)).sort();
+  if (!requestedLoadIds.length) throw new Error('A settlement needs at least one load.');
+
+  const eligibleLoads = await db.select({
+    id: schema.loads.id,
+    rate: schema.loads.rate,
+    totalFeeAmount: schema.loads.totalFeeAmount,
+    carrierNet: schema.loads.carrierNet,
+  }).from(schema.loads).where(and(
+    eq(schema.loads.carrierId, input.carrierId),
+    gte(schema.loads.deliveryDate, input.periodStart),
+    lte(schema.loads.deliveryDate, input.periodEnd),
+    inArray(schema.loads.status, ['delivered', 'pod_received', 'invoiced', 'paid']),
+  ));
+  const eligibleIds = eligibleLoads.map(load => load.id).sort();
+  if (eligibleIds.length !== requestedLoadIds.length || eligibleIds.some((id, index) => id !== requestedLoadIds[index])) {
+    throw new Error('Settlement loads changed. Refresh accounting before recording the settlement.');
+  }
+
+  const existingSettlements = await db.select({ loadIds: schema.settlements.loadIds })
+    .from(schema.settlements)
+    .where(eq(schema.settlements.carrierId, input.carrierId));
+  const alreadySettled = new Set(existingSettlements.flatMap(settlement => settlement.loadIds.split(',').filter(Boolean)));
+  if (requestedLoadIds.some(id => alreadySettled.has(id))) {
+    throw new Error('One or more selected loads already have a carrier settlement.');
+  }
+
+  const cents = (value: number) => Math.round(Number(value) * 100);
+  const grossTotal = eligibleLoads.reduce((total, load) => total + cents(Number(load.rate)), 0) / 100;
+  const feeTotal = eligibleLoads.reduce((total, load) => total + cents(Number(load.totalFeeAmount)), 0) / 100;
+  const netTotal = eligibleLoads.reduce((total, load) => total + cents(Number(load.carrierNet)), 0) / 100;
 
   await db.insert(schema.settlements).values({
     id: crypto.randomUUID(),
     carrierId: input.carrierId,
     periodStart: input.periodStart,
     periodEnd: input.periodEnd,
-    loadIds: input.loadIds.join(','),
-    grossTotal: input.grossTotal,
-    feeTotal: input.feeTotal,
-    netTotal: input.netTotal,
+    loadIds: requestedLoadIds.join(','),
+    grossTotal,
+    feeTotal,
+    netTotal,
     generatedAt: new Date().toISOString(),
   });
 }

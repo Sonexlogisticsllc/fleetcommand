@@ -6,7 +6,7 @@ import { db } from '../db/client';
 import { users } from '../db/schema';
 import { and, eq } from 'drizzle-orm';
 import { verify } from '@node-rs/argon2';
-import { lucia } from './lucia';
+import { lucia, validateSonexSession } from './lucia';
 import type { SonexUser, SonexRole } from './sonexTypes';
 
 const PORTAL_PREVIEW_COOKIE = 'sonex_admin_portal_return';
@@ -119,7 +119,7 @@ export async function startPortalPreviewAction(targetUserId: string): Promise<{ 
     const sessionId = cookieStore.get(lucia.sessionCookieName)?.value;
     if (!sessionId) return { success: false, error: 'Sign in as an administrator first.' };
 
-    const { user: currentUser } = await lucia.validateSession(sessionId);
+    const { user: currentUser } = await validateSonexSession(sessionId);
     if (!currentUser || currentUser.role !== 'admin') {
       return { success: false, error: 'Administrator access is required.' };
     }
@@ -190,7 +190,7 @@ export async function getCurrentUserAction(): Promise<SonexUser | null> {
       return null;
     }
     
-    const { session, user } = await lucia.validateSession(sessionId);
+    const { session, user } = await validateSonexSession(sessionId);
     
     if (session && session.fresh) {
       const sessionCookie = lucia.createSessionCookie(session.id);

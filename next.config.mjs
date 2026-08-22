@@ -1,7 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  turbopack: {
+    root: process.cwd(),
+  },
+  serverExternalPackages: ['@node-rs/argon2', 'pdf-parse'],
   experimental: {
-    serverComponentsExternalPackages: ['@node-rs/argon2', 'pdf-parse'],
     serverActions: {
       bodySizeLimit: '25mb',
     },

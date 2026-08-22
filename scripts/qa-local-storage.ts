@@ -6,6 +6,7 @@ import {
   createStorageKey,
   removeStoredObject,
   storeUploadBuffer,
+  validateUploadContent,
   validateUploadMetadata,
 } from '../lib/storageServer';
 
@@ -24,12 +25,14 @@ async function main() {
     size: source.length,
   });
   const key = createStorageKey(upload);
+  const verifiedUpload = validateUploadContent(source, upload);
 
   try {
-    const stored = await storeUploadBuffer(source, upload, key);
-    assert.match(stored.url, /^\/uploads\/load-documents\//);
+    const stored = await storeUploadBuffer(source, verifiedUpload, key);
+    assert.match(stored.url, /^\/api\/storage\/object\?key=/);
     assert.equal(stored.path, key);
-    const localBytes = await readFile(path.join(process.cwd(), 'public', stored.url.replace(/^\/+/, '')));
+    const localName = key.replace(/[\\/?%*:|"<>\s]/g, '_');
+    const localBytes = await readFile(path.join(process.cwd(), 'public', 'uploads', upload.bucket, localName));
     assert.deepEqual(localBytes, source);
 
     assert.throws(() => validateUploadMetadata({
@@ -53,6 +56,14 @@ async function main() {
       pathPrefix: 'load-local-qa-001/bol',
       size: MAX_UPLOAD_BYTES + 1,
     }), /20 MB or smaller/);
+    assert.throws(() => validateUploadMetadata({
+      bucket: 'load-documents',
+      contentType: 'application/pdf',
+      fileName: 'rate.pdf',
+      pathPrefix: '../outside',
+      size: 10,
+    }), /valid load and document type/);
+    assert.throws(() => validateUploadContent(Buffer.from('not a PDF'), upload), /does not match/);
 
     console.log(`Local storage QA passed (${source.length} bytes round-tripped).`);
   } finally {

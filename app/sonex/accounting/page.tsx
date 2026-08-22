@@ -391,9 +391,11 @@ export default function AccountingPage() {
         bodyStyles: { fontSize: 8.5, textColor: [51, 65, 85] },
         columnStyles: { 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' } },
       });
-      await recordCarrierSettlement({ carrierId: carrier.id, periodStart: settlementFrom, periodEnd: settlementTo, loadIds: settlementLoads.map(load => load.id), grossTotal, feeTotal, netTotal });
+      if (!isMcOwner) {
+        await recordCarrierSettlement({ carrierId: carrier.id, periodStart: settlementFrom, periodEnd: settlementTo, loadIds: settlementLoads.map(load => load.id), grossTotal, feeTotal, netTotal });
+      }
       doc.save('sonex-settlement-' + carrier.lastName.toLowerCase() + '-' + settlementFrom + '.pdf');
-      toast.success('Carrier settlement PDF downloaded.');
+      toast.success(isMcOwner ? 'Carrier settlement PDF downloaded.' : 'Carrier settlement recorded and PDF downloaded.');
       await reload();
     } catch (error) {
       console.error(error);
@@ -450,7 +452,7 @@ export default function AccountingPage() {
                       <td className="px-4 py-3 font-mono text-slate-800">{money(invoice.amount)}</td>
                       <td className="px-4 py-3"><span className={'inline-flex px-1.5 py-0.5 text-[10px] font-semibold capitalize ' + invoiceTone(invoice.status)}>{invoice.status}</span></td>
                       <td className="px-4 py-3 text-right">
-                        <select
+                        {isMcOwner ? <span className="text-xs font-medium capitalize text-slate-600">{invoice.status}</span> : <select
                           aria-label={'Status for ' + invoice.invoiceNumber}
                           value={invoice.status}
                           disabled={busyId === 'status-' + invoice.id}
@@ -458,7 +460,7 @@ export default function AccountingPage() {
                           className="border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 outline-none focus:border-blue-500 disabled:opacity-50"
                         >
                           <option value="draft">Draft</option><option value="sent">Sent</option><option value="paid">Paid</option>
-                        </select>
+                        </select>}
                       </td>
                     </tr>
                   );
@@ -467,7 +469,7 @@ export default function AccountingPage() {
               </tbody>
             </table>
           </div>
-          {!!readyToInvoice.length && (
+          {!isMcOwner && !!readyToInvoice.length && (
             <div className="border-t border-slate-200 bg-slate-50 px-4 py-3">
               <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-500">Ready for billing</p>
               <div className="flex flex-wrap gap-2">
@@ -496,14 +498,14 @@ export default function AccountingPage() {
             </div>
           </section>
           <section className="border border-slate-200 bg-white">
-            <div className="border-b border-slate-200 px-4 py-3"><h2 className="text-sm font-semibold text-slate-900">Record payable</h2><p className="mt-0.5 text-xs text-slate-500">Lumper, fuel advance, parking, repair, or other load cost.</p></div>
-            <form onSubmit={submitExpense} className="space-y-3 p-4">
+            <div className="border-b border-slate-200 px-4 py-3"><h2 className="text-sm font-semibold text-slate-900">{isMcOwner ? 'Payable access' : 'Record payable'}</h2><p className="mt-0.5 text-xs text-slate-500">{isMcOwner ? 'Payable records are visible here; only Sonex Dispatch can add or edit costs.' : 'Lumper, fuel advance, parking, repair, or other load cost.'}</p></div>
+            {isMcOwner ? <div className="p-4 text-xs leading-5 text-slate-600">This financial workspace is read-only for MC owners. Contact Sonex Dispatch to record a payable against one of your loads.</div> : <form onSubmit={submitExpense} className="space-y-3 p-4">
               <select value={expenseForm.loadId} onChange={event => setExpenseForm(current => ({ ...current, loadId: event.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 outline-none focus:border-blue-500"><option value="">Select load</option>{(data?.loads ?? []).map(load => <option key={load.id} value={load.id}>{load.loadNumber} / {load.brokerName}</option>)}</select>
               <div className="grid grid-cols-2 gap-3"><input value={expenseForm.category} onChange={event => setExpenseForm(current => ({ ...current, category: event.target.value }))} placeholder="Expense category" className="min-w-0 border border-slate-200 px-3 py-2 text-xs outline-none placeholder:text-slate-400 focus:border-blue-500" /><input type="number" min="0" step="0.01" value={expenseForm.amount} onChange={event => setExpenseForm(current => ({ ...current, amount: event.target.value }))} placeholder="Amount" className="min-w-0 border border-slate-200 px-3 py-2 text-xs outline-none placeholder:text-slate-400 focus:border-blue-500" /></div>
               <div className="grid grid-cols-2 gap-3"><input type="date" value={expenseForm.incurredAt} onChange={event => setExpenseForm(current => ({ ...current, incurredAt: event.target.value }))} className="min-w-0 border border-slate-200 px-3 py-2 text-xs outline-none focus:border-blue-500" /><input value={expenseForm.vendorName} onChange={event => setExpenseForm(current => ({ ...current, vendorName: event.target.value }))} placeholder="Vendor" className="min-w-0 border border-slate-200 px-3 py-2 text-xs outline-none placeholder:text-slate-400 focus:border-blue-500" /></div>
               <input value={expenseForm.notes} onChange={event => setExpenseForm(current => ({ ...current, notes: event.target.value }))} placeholder="Reference or internal note" className="w-full border border-slate-200 px-3 py-2 text-xs outline-none placeholder:text-slate-400 focus:border-blue-500" />
               <button disabled={busyId === 'expense'} className="inline-flex w-full items-center justify-center gap-2 bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50">{busyId === 'expense' ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}Record payable</button>
-            </form>
+            </form>}
           </section>
         </div>
 

@@ -5,6 +5,7 @@ import {
   createStorageKey,
   removeStoredObject,
   storeUploadBuffer,
+  validateUploadContent,
   validateUploadMetadata,
 } from './storageServer';
 
@@ -24,7 +25,8 @@ export async function uploadFileAction(formData: FormData): Promise<{ url: strin
   await authorizeUpload(upload.bucket, upload.safePrefix);
   const arrayBuffer = await file.arrayBuffer();
   const fileBuffer = Buffer.from(arrayBuffer);
-  const result = await storeUploadBuffer(fileBuffer, upload, createStorageKey(upload));
+  const verifiedUpload = validateUploadContent(fileBuffer, upload);
+  const result = await storeUploadBuffer(fileBuffer, verifiedUpload, createStorageKey(verifiedUpload));
   return {
     url: result.url,
     path: result.path,

@@ -116,46 +116,10 @@ export async function uploadFile(
     }
   }
 
-  const uploadName = optimizedFile instanceof File ? optimizedFile.name : file.name;
-  const contentType = optimizedFile.type || file.type || 'application/octet-stream';
-  const signingResponse = await fetch('/api/storage/presign', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      bucket,
-      contentType,
-      fileName: uploadName,
-      pathPrefix,
-      size: optimizedFile.size,
-    }),
-  });
-  const signingResult = await signingResponse.json();
-  if (!signingResponse.ok) throw new Error(signingResult.error || 'The upload could not be prepared.');
-
-  if (signingResult.mode === 'direct') {
-    try {
-      const directResponse = await fetch(signingResult.uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': contentType },
-        body: optimizedFile,
-      });
-      if (directResponse.ok) {
-        return {
-          url: signingResult.url,
-          path: signingResult.path,
-          bucket: signingResult.bucket as StorageBucket,
-        };
-      }
-    } catch {
-      // Some browsers block a direct S3-compatible upload when an R2 CORS rule
-      // has not propagated. The authenticated Server Action uses the same bucket
-      // credentials without requiring a cross-origin browser request.
-    }
-    const serverFile = optimizedFile instanceof File ? optimizedFile : file;
-    return uploadThroughServerAction(serverFile, bucket, pathPrefix);
-  }
-
-  return uploadThroughServerAction(file, bucket, pathPrefix);
+  // The server action validates the actual bytes. Keeping browser uploads on the
+  // same origin avoids R2 CORS failures and prevents direct-object bypasses.
+  const serverFile = optimizedFile instanceof File ? optimizedFile : file;
+  return uploadThroughServerAction(serverFile, bucket, pathPrefix);
 }
 
 /**

@@ -10,6 +10,7 @@ export const lucia = new Lucia(adapter, {
   sessionCookie: {
     expires: false,
     attributes: {
+      path: '/',
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
     },
@@ -25,6 +26,21 @@ export const lucia = new Lucia(adapter, {
     };
   },
 });
+
+export type AuthenticatedSonexUser = {
+  id: string;
+  email: string;
+  role: string;
+  displayName: string;
+  carrierId: string | null;
+  mcOwnerId: string | null;
+  avatar: string | null;
+};
+
+export async function validateSonexSession(sessionId: string) {
+  const { session, user } = await lucia.validateSession(sessionId);
+  return { session, user: user as AuthenticatedSonexUser | null };
+}
 
 declare module 'lucia' {
   interface Register {

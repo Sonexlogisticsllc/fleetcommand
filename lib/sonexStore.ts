@@ -3,11 +3,12 @@
 
 import { db } from '../db/client';
 import * as schema from '../db/schema';
-import { eq, desc, and, inArray, count, sum, avg } from 'drizzle-orm';
+import { eq, desc, and, inArray, count, sum, avg, like } from 'drizzle-orm';
 import { hash } from '@node-rs/argon2';
 import crypto from 'crypto';
 import { getCurrentUserAction } from './authActions';
 import { buildTodayActivity } from './dashboardActivity';
+import { secureStoredUrl } from './storageServer';
 
 
 import {
@@ -93,9 +94,12 @@ async function requireLoadAccess(loadId: string) {
 // â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
-async function generateLoadNumber(existingLoads: SonexLoad[]): Promise<string> {
+async function generateLoadNumber(): Promise<string> {
   const year = new Date().getFullYear();
   const pattern = new RegExp(`^SNX-${year}-(\\d+)$`);
+  const existingLoads = await db.select({ loadNumber: schema.loads.loadNumber })
+    .from(schema.loads)
+    .where(like(schema.loads.loadNumber, `SNX-${year}-%`));
   const existing = existingLoads
     .map(load => load.loadNumber.match(pattern)?.[1])
     .map(value => value ? Number.parseInt(value, 10) : Number.NaN)
@@ -192,9 +196,9 @@ function mapDbLoad(l: typeof schema.loads.$inferSelect): SonexLoad {
     carrierNet: Number(l.carrierNet),
     ratePerMile: Number(l.ratePerMile),
     status: l.status as any,
-    ratConUrl: l.ratConUrl || undefined,
-    bolUrl: l.bolUrl || undefined,
-    podUrl: l.podUrl || undefined,
+    ratConUrl: secureStoredUrl(l.ratConUrl),
+    bolUrl: secureStoredUrl(l.bolUrl),
+    podUrl: secureStoredUrl(l.podUrl),
     notes: l.notes,
     freeTimeMinutes: l.freeTimeMinutes,
     detentionHours: Number(l.detentionHours),
@@ -708,8 +712,7 @@ export async function addLoad(
     const { totalFeeAmount, dispatchFeeAmount, mcOwnerFeeAmount, carrierNet, ratePerMile } = computeLoadFinancials(
       data.rate, data.miles, totalFeePercent, dispatchFeePercent,
     );
-    const existing = (await db.select().from(schema.loads)).map(mapDbLoad);
-    const loadNumber = await generateLoadNumber(existing);
+    const loadNumber = await generateLoadNumber();
     const id = crypto.randomUUID();
 
     let driverId = data.driverId;
@@ -960,6 +963,53 @@ export async function getCheckins(loadId: string): Promise<SonexLoadCheckin[]> {
   }
 }
 
+export async function getCheckinsForLoads(loadIds: string[]): Promise<Record<string, SonexLoadCheckin[]>> {
+  const ids = Array.from(new Set(loadIds.filter(Boolean)));
+  if (ids.length === 0) return {};
+
+  try {
+    const user = await requireUser();
+    const loadConditions = [inArray(schema.loads.id, ids)];
+
+    if (user.role === 'carrier') {
+      if (!user.carrierId) return {};
+      loadConditions.push(eq(schema.loads.carrierId, user.carrierId));
+    } else if (user.role === 'mc_owner') {
+      const scope = await getMcOwnerScope(user);
+      loadConditions.push(eq(schema.loads.mcOwnerId, scope.id));
+      if (!scope.canManageLeasedCarriers) {
+        if (!scope.primaryCarrierId) return {};
+        loadConditions.push(eq(schema.loads.carrierId, scope.primaryCarrierId));
+      }
+    }
+
+    const accessibleLoads = await db.select({ id: schema.loads.id })
+      .from(schema.loads)
+      .where(and(...loadConditions));
+    const accessibleIds = accessibleLoads.map(load => load.id);
+    if (accessibleIds.length === 0) return {};
+
+    const records = await db.select().from(schema.loadCheckins)
+      .where(inArray(schema.loadCheckins.loadId, accessibleIds))
+      .orderBy(schema.loadCheckins.loadId, schema.loadCheckins.timestamp);
+
+    return records.reduce<Record<string, SonexLoadCheckin[]>>((grouped, checkin) => {
+      (grouped[checkin.loadId] ??= []).push({
+        id: checkin.id,
+        loadId: checkin.loadId,
+        event: checkin.event as CheckinEvent,
+        timestamp: checkin.timestamp,
+        notes: checkin.notes,
+        loggedBy: checkin.loggedBy as SonexLoadCheckin['loggedBy'],
+      });
+      return grouped;
+    }, {});
+  } catch (err) {
+    console.error('Error fetching batched check-ins:', err);
+    return {};
+  }
+}
+
 export async function recalculateDetention(loadId: string): Promise<void> {
   try {
     const loadRecord = await db.select().from(schema.loads).where(eq(schema.loads.id, loadId)).limit(1);
@@ -1097,7 +1147,7 @@ export async function getCargoPhotos(loadId: string): Promise<SonexCargoPhoto[]>
     return list.map(p => ({
       id: p.id,
       loadId: p.loadId,
-      url: p.url,
+      url: secureStoredUrl(p.url) || p.url,
       stage: p.stage as any,
       caption: p.caption,
       uploadedAt: p.uploadedAt,

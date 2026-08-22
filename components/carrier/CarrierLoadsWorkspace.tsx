@@ -1387,7 +1387,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
                   </span>
                   {!doneEvents.has("arrived_pickup") && (
                     <span className="text-[10px] text-slate-600 italic">
-                      — Unlocks after "Arrived at Pickup"
+                      — Unlocks after &quot;Arrived at Pickup&quot;
                     </span>
                   )}
                 </div>
@@ -1420,7 +1420,7 @@ function ActiveLoadCard({ load, onRefresh }: ActiveLoadCardProps) {
                   </span>
                   {!doneEvents.has("arrived_delivery") && (
                     <span className="text-[10px] text-slate-600 italic">
-                      — Unlocks after "Arrived at Delivery"
+                      — Unlocks after &quot;Arrived at Delivery&quot;
                     </span>
                   )}
                 </div>
@@ -1605,7 +1605,7 @@ export function CarrierLoadsWorkspace() {
             No Active Loads
           </h3>
           <p className="text-slate-400 text-sm max-w-xs leading-relaxed">
-            You're all caught up! When your dispatcher assigns a new load, it
+            You&apos;re all caught up! When your dispatcher assigns a new load, it
             will appear here.
           </p>
         </div>

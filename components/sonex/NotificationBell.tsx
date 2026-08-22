@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Bell, AlertTriangle, FileWarning, Inbox, Clock, X } from 'lucide-react';
-import { getLoads, getLoadsByCarrier, getCheckins } from '@/lib/sonexStore';
+import { getLoads, getLoadsByCarrier, getCheckinsForLoads } from '@/lib/sonexStore';
 
 interface AlertItem {
   id: string;
@@ -32,9 +32,10 @@ export function NotificationBell({ role, carrierId }: NotificationBellProps) {
         // Active loads crossing detention threshold
         const loads = await getLoads();
         const activeLoads = loads.filter(l => ['dispatched', 'in_transit'].includes(l.status));
+        const checkinsByLoad = await getCheckinsForLoads(activeLoads.map(load => load.id));
         
         for (const l of activeLoads) {
-          const checkins = await getCheckins(l.id);
+          const checkins = checkinsByLoad[l.id] ?? [];
           const done = new Set(checkins.map(c => c.event));
           const freeTime = l.freeTimeMinutes || 120;
 
@@ -91,7 +92,8 @@ export function NotificationBell({ role, carrierId }: NotificationBellProps) {
         // Detention threshold warning on active load
         const activeLoad = loads.find(l => ['dispatched', 'in_transit'].includes(l.status));
         if (activeLoad) {
-          const checkins = await getCheckins(activeLoad.id);
+          const checkinsByLoad = await getCheckinsForLoads([activeLoad.id]);
+          const checkins = checkinsByLoad[activeLoad.id] ?? [];
           const done = new Set(checkins.map(c => c.event));
           const freeTime = activeLoad.freeTimeMinutes || 120;
 
